@@ -1,0 +1,3037 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kinship Diagram</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+  :root{
+    --paper:#F2F4F2; --grid:#DBE1DD; --rule:#E3E8E4; --ink:#17211E; --ink-soft:#63736D;
+    --panel:#1B2422; --panel-2:#243030; --line:#35423E; --panel-text:#E7ECE9;
+    --accent:#D9A21B;
+    --glass:rgba(242,244,242,.93); --edge:#C9D2CC;
+    --display:'Space Grotesk',system-ui,sans-serif;
+    --body:'Instrument Sans',system-ui,sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,monospace;
+  }
+  /* Dark mode only repaints the surfaces — the symbols take their colour
+     from --ink and --paper, so they invert with everything else. */
+  [data-theme="dark"]{
+    --paper:#141918; --grid:#242E2B; --rule:#2B3633; --ink:#E7EDEA; --ink-soft:#8CA098;
+    --panel:#1E2A27; --panel-2:#2A3734; --line:#3D4C48; --panel-text:#EDF2EF;
+    --glass:rgba(30,42,39,.93); --edge:#3D4C48;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--paper);font-family:var(--body);color:var(--ink);
+       overflow:hidden;display:flex;flex-direction:column;height:100vh;
+       -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+  input,textarea{-webkit-user-select:text;user-select:text}
+
+  .bar{display:flex;align-items:center;gap:7px;padding:0 12px;height:52px;flex:0 0 52px;
+       background:var(--panel);color:var(--panel-text);border-bottom:1px solid #000;z-index:20}
+  .title-btn{font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:-.01em;
+       background:none;border:none;color:var(--panel-text);cursor:pointer;padding:6px 8px;
+       border-radius:7px;display:flex;align-items:center;gap:3px}
+  .title-btn:hover{background:var(--panel-2)}
+  .count{font-family:var(--mono);font-size:11px;color:#8C9C96;margin-right:auto;padding-left:9px}
+  .btn{font-family:var(--display);font-weight:500;font-size:12.5px;color:var(--panel-text);
+       background:var(--panel-2);border:1px solid var(--line);border-radius:7px;
+       padding:7px 11px;cursor:pointer;white-space:nowrap;transition:background .12s,border-color .12s}
+  .btn:hover{background:#2E3B38;border-color:#4A5A55}
+  .btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .btn:disabled{opacity:.4;cursor:default}
+  .btn.ghost{background:transparent}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#1B2422;font-weight:700}
+  .btn.primary:hover{background:#E8B33A;border-color:#E8B33A}
+  .btn.danger:hover{background:#4A2320;border-color:#7A3A33}
+  .menu{position:relative}
+  .menu-list{position:absolute;right:0;top:40px;background:var(--panel);border:1px solid var(--line);
+             border-radius:9px;padding:5px;min-width:158px;box-shadow:0 12px 30px rgba(0,0,0,.3);z-index:30}
+  .menu-list button{display:flex;justify-content:space-between;gap:14px;width:100%;text-align:left;
+             background:none;border:none;color:var(--panel-text);font:inherit;font-size:13px;
+             padding:8px 10px;border-radius:6px;cursor:pointer}
+  .menu-list button:hover{background:var(--panel-2)}
+  .menu-list button.danger:hover{background:#4A2320}
+  .menu-list span{color:#7E8E88;font-family:var(--mono);font-size:11px}
+  .menu-list hr{border:none;border-top:1px solid var(--line);margin:5px 2px}
+
+  .stage{position:relative;flex:1;min-height:0}
+  svg#canvas{width:100%;height:100%;display:block;touch-action:none;cursor:default}
+  svg#canvas.panready{cursor:grab}
+  svg#canvas.panning{cursor:grabbing}
+  svg#canvas.lifting{cursor:grabbing}
+  svg#canvas.linking{cursor:crosshair}
+  svg#canvas.arranging{cursor:ew-resize}
+  .btn.armed{background:var(--accent);border-color:var(--accent);color:#1B2422;font-weight:700}
+  .btn.warn{background:#4A3A18;border-color:#7A6224;color:#F2DFAE}
+  .btn.warn:hover{background:#5C4820;border-color:#9A7C2E}
+  .btn.hot{background:#7E2B22;border-color:#A84436;color:#FFE6E0;font-weight:700}
+  .btn.hot:hover{background:#94342A;border-color:#C2513F}
+
+  /* ---------------- add-people popover ---------------- */
+  .adder{position:absolute;top:8px;left:12px;z-index:22;width:266px;
+         background:var(--panel);color:var(--panel-text);border:1px solid var(--line);
+         border-radius:11px;padding:14px;box-shadow:0 16px 40px rgba(0,0,0,.3)}
+  .adder h3{font-family:var(--display);font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+            color:#8C9C96;margin:0 0 10px;font-weight:700}
+  .adder .note{font-size:11.5px;color:#8C9C96;margin:9px 0 0;line-height:1.5}
+  .seg{display:flex;gap:5px}
+  .seg button{flex:1;padding:8px 0;border-radius:6px;border:1px solid var(--line);
+      background:var(--panel-2);color:#A9B8B2;font-family:var(--display);font-size:12.5px;
+      font-weight:500;cursor:pointer}
+  .seg button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#1B2422;font-weight:700}
+  .in{width:100%;background:var(--panel-2);color:var(--panel-text);border:1px solid var(--line);
+      border-radius:6px;padding:9px;font:inherit;font-size:13.5px}
+  .in:focus{outline:none;border-color:var(--accent)}
+  .row2{display:flex;gap:7px;margin-top:9px}
+  .row2 .btn{flex:1;text-align:center;justify-content:center}
+
+  /* ---------------- relationship wheel ---------------- */
+  .wheel{position:absolute;inset:0;pointer-events:none;z-index:10}
+  .slot{position:absolute;transform:translate(-50%,-50%);
+        display:flex;align-items:center;justify-content:center;
+        min-width:76px;padding:8px 12px;border-radius:999px;
+        background:var(--glass);border:1.5px dashed var(--ink-soft);color:var(--ink-soft);
+        font-family:var(--display);font-weight:600;font-size:12px;white-space:nowrap;
+        box-shadow:0 3px 12px rgba(23,33,30,.14);transition:transform .1s,background .1s,color .1s}
+  .slot.on{background:var(--accent);border-style:solid;border-color:var(--accent);color:#1B2422;
+           transform:translate(-50%,-50%) scale(1.13);box-shadow:0 5px 18px rgba(23,33,30,.24)}
+  .zone{position:absolute;transform:translate(-50%,-50%);border-radius:50%;pointer-events:none;
+        border:1.5px dashed rgba(99,115,109,.3);background:rgba(217,162,27,.055)}
+  .marquee{position:absolute;z-index:11;pointer-events:none;border-radius:3px;
+           border:1.5px solid var(--accent);background:rgba(217,162,27,.13)}
+  .multibar{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);z-index:15;
+            display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center;
+            max-width:min(680px,92vw);padding:9px 12px 9px 16px;border-radius:18px;
+            background:var(--panel);color:var(--panel-text);box-shadow:0 10px 28px rgba(0,0,0,.28)}
+  .multibar b{font-family:var(--display);font-size:13px;font-weight:700;margin-right:2px}
+  .multibar span{font-size:12px;color:#8C9C96;margin-right:6px}
+  .multibar button{background:var(--panel-2);border:1px solid var(--line);color:var(--panel-text);
+            border-radius:999px;padding:6px 12px;font:inherit;font-size:12.5px;cursor:pointer}
+  .multibar button:hover{background:#2E3B38}
+  .multibar button.danger:hover{background:#4A2320;border-color:#7A3A33}
+  .swatches{display:flex;flex-wrap:wrap;gap:5px}
+  .swatch{width:23px;height:23px;padding:0;border-radius:7px;cursor:pointer;
+          border:1.5px solid var(--line);background:var(--panel-2);
+          display:flex;align-items:center;justify-content:center}
+  .swatch i{width:12px;height:12px;border-radius:50%;display:block;border:2.5px solid;box-sizing:border-box}
+  .swatch:hover{border-color:#5A6A65}
+  .swatch[aria-pressed="true"]{border-color:var(--accent);background:#33403A}
+  .swatch.sm{width:20px;height:20px;border-radius:6px}
+  .swatch.sm i{width:10px;height:10px;border-width:2px}
+
+  /* ---------------- quick-add pills ---------------- */
+  .ring{position:absolute;inset:0;pointer-events:none;z-index:8}
+  .pill{position:absolute;transform:translate(-50%,-50%);pointer-events:auto;
+        display:flex;align-items:center;gap:6px;white-space:nowrap;
+        background:var(--paper);color:var(--ink);border:1.5px solid var(--ink);
+        border-radius:999px;padding:5px 10px;cursor:pointer;
+        font-family:var(--display);font-weight:600;font-size:11.5px;line-height:1;
+        box-shadow:0 2px 9px rgba(23,33,30,.16);transition:background .12s,transform .12s;
+        animation:pop .15s ease-out}
+  .pill:hover{background:var(--accent);border-color:var(--accent);transform:translate(-50%,-50%) scale(1.05)}
+  .pill small{font-family:var(--mono);font-size:9.5px;opacity:.45;font-weight:400}
+  .pill.dash{border-style:dashed;font-weight:500}
+  .banner{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:17;
+          display:flex;align-items:center;gap:12px;padding:8px 10px 8px 16px;border-radius:999px;
+          background:var(--panel);color:var(--panel-text);font-size:13px;
+          box-shadow:0 8px 24px rgba(0,0,0,.25)}
+  .banner button{background:var(--panel-2);border:1px solid var(--line);color:var(--panel-text);
+          border-radius:999px;padding:5px 11px;font:inherit;font-size:12px;cursor:pointer}
+  .banner button:hover{background:#2E3B38}
+  @keyframes pop{from{opacity:0;transform:translate(-50%,-50%) scale(.82)}to{opacity:1}}
+
+  .panel{position:absolute;top:0;right:0;bottom:0;width:290px;max-width:84vw;z-index:12;
+         background:var(--panel);color:var(--panel-text);border-left:1px solid #000;
+         display:flex;flex-direction:column;overflow-y:auto;box-shadow:-14px 0 34px rgba(0,0,0,.22)}
+  .panel h2{font-family:var(--display);font-size:11px;font-weight:700;letter-spacing:.09em;
+            text-transform:uppercase;color:#8C9C96;margin:0 0 10px}
+  .sec{padding:15px 16px 17px;border-bottom:1px solid var(--line)}
+  .sec:last-child{border-bottom:none}
+  .close{position:absolute;top:10px;right:11px;background:none;border:none;color:#8C9C96;
+         font-size:19px;line-height:1;cursor:pointer;padding:4px 7px;border-radius:6px}
+  .close:hover{background:var(--panel-2);color:var(--panel-text)}
+  .field{margin-bottom:11px}
+  .field label{display:block;font-size:11px;color:#8C9C96;margin-bottom:4px;font-family:var(--mono)}
+  textarea.in{resize:vertical;min-height:66px;line-height:1.45}
+  .check{display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer;margin-bottom:8px}
+  .termrow{margin-bottom:7px}
+  .termrow i{display:block;font-style:normal;font-size:11.5px;font-weight:600;margin-bottom:3px}
+  .term-none{font-size:12.5px;color:#8C9C96;line-height:1.5;margin:0 0 11px}
+  .rel{font-size:12.5px;color:#A9B8B2;line-height:1.6;margin-bottom:9px}
+  .rel b{color:var(--panel-text);font-weight:600}
+  .lnk{background:none;border:none;color:var(--accent);font:inherit;font-size:12.5px;cursor:pointer;
+       padding:0;text-decoration:underline;text-underline-offset:2px}
+
+  .pop{position:absolute;z-index:13;background:var(--panel);color:var(--panel-text);
+       border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:12.5px;
+       box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  .keys{left:12px;bottom:52px;min-width:222px}
+  .keys div{display:flex;justify-content:space-between;gap:18px;padding:3px 0;color:#B9C7C1}
+  .keys kbd{font-family:var(--mono);font-size:11px;background:var(--panel-2);border:1px solid var(--line);
+            border-radius:4px;padding:1px 6px;color:var(--panel-text)}
+  .keys hr{border:none;border-top:1px solid var(--line);margin:7px 0}
+  .slotrow{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--line)}
+  .slotrow:last-child{border-bottom:none}
+  .slotrow.on{background:#22302B;margin:0 -16px;padding:10px 16px;border-bottom-color:transparent}
+  .slotname{flex:0 0 128px;font-weight:600}
+  .slotdesc{flex:1;font-size:12.5px;color:#8FA099;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .slotcur{font-family:var(--mono);font-size:11px;color:var(--accent);white-space:nowrap}
+  .keys{max-height:70vh;overflow-y:auto}
+  .legend{right:12px;bottom:12px;width:262px}
+  .legend h3{font-family:var(--display);font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+             color:#8C9C96;margin:0 0 9px;font-weight:700}
+  .legend ul{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:6px 10px}
+  .legend li{display:flex;align-items:center;gap:7px;color:#B9C7C1;font-size:11.5px}
+  /* Always on screen, unlike the toggled pop-ups above -- a running key the
+     person sets once (which color is which tribe or village) and glances
+     back at throughout the session. */
+  /* Sits below the add-people / title corner (they're transient, this is
+     not), and never so tall it runs into the zoom controls. */
+  /* See-through: the canvas shows through the panel itself, but the colour
+     chips stay solid (they're the thing being keyed) and the text carries a
+     halo so it reads over whatever happens to be behind it. */
+  .colorlegend{position:absolute;left:12px;top:238px;z-index:6;width:172px;
+       max-height:calc(100% - 300px);overflow-y:auto;
+       background:transparent;border:none;box-shadow:none;padding:11px;pointer-events:none}
+  .colorlegend.empty{display:none}   /* nothing coloured yet -- nothing to key */
+  .colorlegend h3{font-family:var(--display);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+       color:var(--ink-soft);margin:0 0 8px;font-weight:700;
+       text-shadow:0 0 5px var(--paper),0 0 5px var(--paper),0 1px 2px var(--paper)}
+  .keyitem{display:flex;align-items:center;gap:7px;margin-bottom:5px;pointer-events:auto}
+  .keyitem i{width:14px;height:14px;border-radius:4px;flex:0 0 14px;border:1px solid rgba(0,0,0,.25);
+       box-shadow:0 1px 3px rgba(0,0,0,.25)}
+  .keyname{flex:1;min-width:0;background:transparent;border:1px solid transparent;color:var(--ink);
+       font:inherit;font-size:12px;font-weight:600;padding:3px 5px;border-radius:5px;
+       text-shadow:0 0 5px var(--paper),0 0 5px var(--paper),0 0 5px var(--paper),0 1px 2px var(--paper)}
+  .keyname:hover{border-color:var(--edge);background:var(--glass)}
+  .keyname:focus{outline:none;border-color:var(--accent);background:var(--paper);text-shadow:none}
+  .keyname::placeholder{color:var(--ink-soft);opacity:.85}
+
+
+  .zoom{position:absolute;left:12px;bottom:12px;z-index:9;display:flex;gap:4px;align-items:center}
+  .zoom button{width:30px;height:30px;border-radius:7px;border:1px solid var(--edge);background:var(--glass);
+        color:var(--ink);font-family:var(--display);font-size:15px;font-weight:600;cursor:pointer;line-height:1}
+  .zoom button:hover{background:var(--accent);border-color:var(--accent)}
+  .zoom span{font-family:var(--mono);font-size:10.5px;color:var(--ink-soft);padding:0 5px}
+  .zoom .sep{width:1px;height:20px;background:var(--edge);padding:0;margin:0 4px}
+  .zoom button#tDown,.zoom button#tUp{width:auto;padding:0 8px;font-size:12px}
+
+  .toast{position:absolute;left:50%;bottom:20px;transform:translateX(-50%);z-index:16;
+         background:var(--panel);color:var(--panel-text);padding:9px 15px;border-radius:8px;
+         font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.25);max-width:80%;text-align:center}
+  .hint{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:4;
+        font-size:12px;color:var(--ink-soft);background:var(--glass);padding:5px 11px;border-radius:7px}
+  /* ------------------------------ settings ------------------------------ */
+  .sheet{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;
+         background:rgba(8,12,11,.5);padding:24px}
+  .sheet-box{width:520px;max-width:100%;max-height:82vh;display:flex;flex-direction:column;
+         background:var(--panel);color:var(--panel-text);border:1px solid var(--line);
+         border-radius:14px;box-shadow:0 24px 60px rgba(0,0,0,.42);overflow:hidden}
+  .sheet-box header{display:flex;align-items:center;gap:14px;padding:14px 16px;
+         border-bottom:1px solid var(--line);position:relative}
+  .sheet-box h2{font-family:var(--display);font-size:15px;font-weight:700;margin:0}
+  .sheet-box nav{display:flex;gap:5px;margin-left:6px}
+  .tab{background:none;border:1px solid transparent;color:#8FA099;font-family:var(--display);
+       font-size:12.5px;font-weight:500;padding:6px 11px;border-radius:999px;cursor:pointer}
+  .tab:hover{color:var(--panel-text)}
+  .tab.on{background:var(--panel-2);border-color:var(--line);color:var(--panel-text);font-weight:700}
+  .sheet-x{position:absolute;right:12px;top:11px;background:none;border:none;color:#8FA099;
+       font-size:20px;line-height:1;cursor:pointer;padding:3px 8px;border-radius:6px}
+  .sheet-x:hover{background:var(--panel-2);color:var(--panel-text)}
+  .sheet-body{padding:16px;overflow-y:auto}
+  .sheet-body h3{font-family:var(--display);font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+       color:#8FA099;margin:0 0 10px;font-weight:700}
+  .sheet-note{font-size:12.5px;color:#8FA099;line-height:1.55;margin:0 0 14px}
+  .themes{display:flex;gap:10px}
+  .theme-pick{flex:1;background:var(--panel-2);border:1.5px solid var(--line);border-radius:10px;
+       padding:11px;cursor:pointer;color:var(--panel-text);font:inherit;text-align:left}
+  .theme-pick:hover{border-color:#5A6A65}
+  .theme-pick[aria-pressed="true"]{border-color:var(--accent);background:#33403A}
+  .theme-pick b{display:block;font-family:var(--display);font-size:13px;margin-bottom:8px}
+  .swatch-strip{display:flex;height:34px;border-radius:6px;overflow:hidden;border:1px solid var(--line)}
+  .swatch-strip i{flex:1}
+  .keyrow{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--line)}
+  .keyrow:last-child{border-bottom:none}
+  .keyrow span{flex:1;font-size:13px}
+  .keycap{min-width:64px;font-family:var(--mono);font-size:12px;background:var(--panel-2);
+       border:1px solid var(--line);border-radius:6px;padding:6px 10px;color:var(--panel-text);cursor:pointer}
+  .keycap:hover{border-color:#5A6A65}
+  .keycap.listening{background:var(--accent);border-color:var(--accent);color:#1B2422;font-weight:700}
+  .keycap.none{color:#6E7E78}
+  .sheet-foot{display:flex;gap:8px;justify-content:flex-end;padding-top:14px}
+  .titlecard{position:absolute;top:8px;left:12px;z-index:22;width:266px;
+       background:var(--panel);color:var(--panel-text);border:1px solid var(--line);
+       border-radius:11px;padding:12px;box-shadow:0 14px 36px rgba(0,0,0,.32)}
+  .titlecard .seg{margin-top:9px}
+  .titlerow{display:flex;align-items:center;gap:6px;margin-top:10px}
+  .titlerow span{font-family:var(--mono);font-size:11px;color:#8C9C96;margin-right:2px}
+  .titlerow b{font-family:var(--mono);font-size:12px;min-width:24px;text-align:center}
+  .titlerow .btn{padding:6px 10px}
+  .titlerow .danger{margin-left:auto}
+  .hide{display:none !important}
+  @media (prefers-reduced-motion:reduce){.pill,.slot{animation:none;transition:none}}
+  @media (max-width:700px){ .panel{width:100%} .count,.legend{display:none} }
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <button class="title-btn" id="bSlots" title="Switch between saved charts">Kinship Diagram &#9662;</button>
+  <button class="btn ghost danger" id="bClear" title="Delete everything and begin again">Start over</button>
+  <button class="btn ghost hide" id="bClearNo">Cancel</button>
+  <span class="count" id="count">0 people</span>
+  <button class="btn warn hide" id="bCross" title="Some lines still cross — switch to Arrange and drag them apart"></button>
+  <button class="btn primary" id="bAdd">+ Add people</button>
+  <button class="btn ghost" id="bUndo" title="Undo (Ctrl+Z)">Undo</button>
+  <button class="btn ghost" id="bArrange" title="Reorder people along their generation (R)">Arrange</button>
+  <button class="btn ghost" id="bTidy" title="Line up the unattached people (A)">Tidy loose</button>
+  <button class="btn ghost" id="bFit" title="Fit to screen (F)">Fit</button>
+  <button class="btn ghost" id="bLegend">Symbols</button>
+  <button class="btn ghost" id="bKeys">Keys</button>
+  <button class="btn ghost" id="bSettings" title="Settings">Settings</button>
+  <div class="menu">
+    <button class="btn ghost" id="bFile">File &#9662;</button>
+    <div class="menu-list hide" id="fileMenu">
+      <button data-file="pdf">Save as PDF<span>&#8681;</span></button>
+      <button data-file="save">Save to file<span>&#8681;</span></button>
+      <button data-file="open">Open a file<span>&#8679;</span></button>
+    </div>
+  </div>
+  <input type="file" id="fileIn" accept="application/json" class="hide">
+</div>
+
+<div class="stage" id="stage">
+  <svg id="canvas">
+    <defs>
+      <pattern id="dots" width="26" height="26" patternUnits="userSpaceOnUse">
+        <circle cx="1.5" cy="1.5" r="1.1" fill="var(--grid)"/>
+      </pattern>
+    </defs>
+    <rect width="100%" height="100%" fill="url(#dots)"/>
+    <g id="world"></g>
+  </svg>
+
+  <div class="adder hide" id="adder">
+    <h3>Add a person</h3>
+    <input id="addName" class="in" placeholder="Name" autocomplete="off">
+    <div class="seg" style="margin-top:9px">
+      <button data-add-sex="m" aria-pressed="true">Man</button>
+      <button data-add-sex="f" aria-pressed="false">Woman</button>
+      <button data-add-sex="u" aria-pressed="false">Unknown</button>
+    </div>
+    <div class="row2">
+      <button class="btn primary" id="addGo">Add</button>
+      <button class="btn ghost" id="addClose">Done</button>
+    </div>
+    <p class="note">Enter adds and keeps going. They land loose on the canvas &mdash; hold the left button on anyone to pick them up and connect them.</p>
+  </div>
+
+  <div class="colorlegend" id="colorLegend">
+    <h3>Color key</h3>
+    <div id="colorKey"></div>
+  </div>
+
+  <div class="marquee hide" id="marquee"></div>
+  <div class="multibar hide" id="multibar"></div>
+  <div class="titlecard hide" id="titleCard">
+    <input id="titleText" class="in" placeholder="Chart title" autocomplete="off">
+    <div class="seg" id="titleFonts"></div>
+    <div class="titlerow">
+      <span>Size</span>
+      <button class="btn" id="titleDown">A&minus;</button>
+      <b id="titleSizeLabel">28</b>
+      <button class="btn" id="titleUp">A+</button>
+      <button class="btn ghost danger" id="titleDel">Remove</button>
+    </div>
+  </div>
+
+  <div class="wheel hide" id="wheel"></div>
+  <div class="ring hide" id="ring">
+    <button class="pill" id="aParents">Parents<small>P</small></button>
+    <button class="pill" id="aBrother">Brother<small>B</small></button>
+    <button class="pill" id="aSister">Sister<small>Z</small></button>
+    <button class="pill" id="aPartner">Spouse<small>M</small></button>
+    <button class="pill" id="aSon">Son<small>S</small></button>
+    <button class="pill" id="aDaughter">Daughter<small>D</small></button>
+    <button class="pill dash" id="aLink">Link&hellip;<small>L</small></button>
+    <button class="pill dash hide" id="lParent">Parent</button>
+    <button class="pill dash hide" id="lSpouse">Spouse</button>
+    <button class="pill dash hide" id="lChild">Child</button>
+    <button class="pill dash hide" id="lSibling">Sibling</button>
+    <button class="pill hide" id="lBack">&larr; Back</button>
+  </div>
+
+  <div class="banner hide" id="banner">
+    <span id="bannerText"></span>
+    <button id="bannerCancel">Cancel</button>
+  </div>
+
+  <div class="hint hide" id="hint">Hold on anyone to pick them up &middot; drag empty space to select a group &middot; middle-drag to move the canvas</div>
+
+  <div class="zoom">
+    <button id="zOut" title="Zoom out">&minus;</button>
+    <span id="zLabel">100%</span>
+    <button id="zIn" title="Zoom in">+</button>
+    <span class="sep"></span>
+    <button id="tDown" title="Smaller names ([)">A&minus;</button>
+    <span id="tLabel">14</span>
+    <button id="tUp" title="Bigger names (])">A+</button>
+  </div>
+
+  <div class="pop keys hide" id="keys"></div>
+  <div class="pop legend hide" id="legend"></div>
+
+  <div class="sheet hide" id="slotsSheet">
+    <div class="sheet-box" style="width:420px">
+      <header>
+        <h2>Your charts</h2>
+        <button class="sheet-x" id="slotsClose">&times;</button>
+      </header>
+      <div class="sheet-body" id="slotsBody"></div>
+    </div>
+  </div>
+
+  <div class="sheet hide" id="settings">
+    <div class="sheet-box">
+      <header>
+        <h2>Settings</h2>
+        <nav>
+          <button class="tab on" data-tab="look">Appearance</button>
+          <button class="tab" data-tab="keys">Shortcuts</button>
+        </nav>
+        <button class="sheet-x" id="setClose" title="Close">&times;</button>
+      </header>
+      <div class="sheet-body" id="setBody"></div>
+    </div>
+  </div>
+  <aside class="panel hide" id="panel"></aside>
+  <div class="toast hide" id="toast"></div>
+</div>
+
+<script>
+/* =========================================================================
+   Kinship diagram — anthropological notation.
+
+   Two kinds of person live on this canvas:
+     · loose    — nobody's relative yet, sits wherever you drop them
+     · placed   — connected to someone, so the diagram decides where they go
+
+   Press and hold anyone to pick them up. Picking up a placed person cuts
+   them free first, so they can be re-homed. Hover over someone while
+   carrying and a ring of slots appears; the label says what the carried
+   person becomes to the one underneath.
+
+   Internally nobody links to anyone directly: spouses and offspring all
+   attach to a shared union. Vertical position is always derived from
+   generation, so a rank can never drift off its line.
+   ========================================================================= */
+
+const ROW_H = 190, NODE = 54, GAP = 116, SPOUSE_GAP = 82;
+const SLOTS_KEY = 'kinship:slots:v1';   // {active, names:[3]}
+const SLOT_COUNT = 3;
+const slotKey = n => 'kinship:slot'+n+':v1';
+
+let slots = { active:0, names:['Chart 1','Chart 2','Chart 3'] };
+function loadSlots(){
+  try {
+    const raw = store.get(SLOTS_KEY);
+    if (raw){
+      const s = JSON.parse(raw);
+      if (Number.isInteger(s.active)) slots.active = Math.min(Math.max(s.active,0), SLOT_COUNT-1);
+      if (Array.isArray(s.names)) s.names.forEach((n,i) => { if (i < SLOT_COUNT && n) slots.names[i] = n; });
+    }
+  } catch {}
+}
+function saveSlots(){ try { store.set(SLOTS_KEY, JSON.stringify(slots)); } catch {} }
+
+function readSlot(n){
+  try { const raw = store.get(slotKey(n)); return raw ? JSON.parse(raw) : null; } catch { return null; }
+}
+function writeSlot(n, data){ try { store.set(slotKey(n), JSON.stringify(data)); } catch {} }
+function slotHasData(n){ return !!store.get(slotKey(n)); }
+
+const HOLD_MS = 300;
+// all in screen pixels: reach a person, pick a slot, break away again
+const SLOT_R = 96, SLOT_HIT = 56, RELEASE_R = 178, SNAP_Y = 46;
+/* You have to actually reach a person to lock onto them — the catching zone
+   is just their symbol, so it scales with the zoom. Once locked, the much
+   larger RELEASE_R holds you there while you reach out to a slot. Making the
+   catching zone as big as the holding zone meant neighbouring zones
+   overlapped and the drag latched onto whoever happened to be nearest. */
+const enterR = () => Math.max(20, (NODE/2 + 8) * view.k);
+
+/* Twelve outline colours. The first is the default ink and is stored as
+   null, so untouched files stay untouched. */
+const COLORS = [
+  ['#17211E','Ink'],   ['#D31C33','Red'],    ['#EE7A0B','Orange'],  ['#A6980A','Gold'],
+  ['#37B202','Lime'],  ['#2C6C26','Green'],  ['#00ADA7','Teal'],    ['#20A4E9','Sky'],
+  ['#2258C9','Blue'],  ['#911AD0','Violet'], ['#C61487','Magenta'], ['#8B532B','Brown']
+];
+const INK = COLORS[0][0];
+const colorOf = p => p.color || INK;
+const swatchRow = (cur, sm) => '<div class="swatches">' + COLORS.map(([hex,name]) =>
+  '<button class="swatch'+(sm?' sm':'')+'" data-color="'+hex+'" title="'+name+
+  '" aria-pressed="'+(cur === hex)+'"><i style="border-color:'+hex+'"></i></button>').join('') + '</div>';
+
+const UNION_TYPES = [
+  ['marriage','Marriage'], ['illegitimate','Illegitimate union'],
+  ['divorce','Divorce'], ['unspecified','Unspecified']
+];
+
+const uid = () => Math.random().toString(36).slice(2,9);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+const store = (() => {
+  try { localStorage.setItem('__t','1'); localStorage.removeItem('__t');
+        return { get:k=>localStorage.getItem(k), set:(k,v)=>localStorage.setItem(k,v) }; }
+  catch { const m={}; return { get:k=>m[k]??null, set:(k,v)=>{m[k]=v;} }; }
+})();
+
+/* ------------------------------ state ---------------------------------- */
+let doc = { people:{}, unions:{} };
+let selected = null;
+let view = { x:0, y:0, k:1 };
+let history = [];
+let press = null, lift = null, pan = null, focusName = false, addSex = 'm';
+let spaceDown = false, emptyPress = false;
+let marked = new Set();          // everything currently selected
+let box = null, gdrag = null;    // rubber band, and a group being shoved around
+let arrange = false, adrag = null;   // reordering people along their rank
+let ringMode = 'add';            // the pills around a selected person
+let linkArm = null;              // a relation waiting for its second person
+let GEN = {}, POS = {}, UPOS = {}, AUTO = {}, EXT = {};
+
+const el = id => document.getElementById(id);
+const svg = el('canvas'), world = el('world');
+
+const newPerson = (gender, over={}) => Object.assign({
+  id:uid(), name:'', gender, birth:'', death:'', deceased:false, ego:false, notes:'',
+  color:null, ord:null, side:null, mx:null, terms:{}, fx:0, fy:0
+}, over);
+const newUnion = (a,b) => ({ id:uid(), partners:[a??null,b??null], type:'marriage', children:[] });
+
+const unionsOf    = pid => Object.values(doc.unions).filter(u => u.partners.includes(pid));
+const parentUnion = pid => Object.values(doc.unions).find(u => u.children.some(c => c.id === pid));
+const nameOf      = id => doc.people[id]?.name || 'Unnamed';
+const isPlaced    = id => Object.values(doc.unions).some(u =>
+                      u.partners.includes(id) || u.children.some(c => c.id === id));
+
+function commit(fn){
+  history.push(JSON.stringify(doc));
+  if (history.length > 90) history.shift();
+  fn(); save(); render();
+}
+function undo(){
+  const prev = history.pop();
+  if (!prev) return flash('Nothing to undo');
+  doc = JSON.parse(prev);
+  if (!doc.people[selected]) selected = null;
+  save(); render();
+}
+function save(){ writeSlot(slots.active, doc); }
+
+const LABEL_MIN = 10, LABEL_MAX = 30;
+const PREF_KEY = 'kinship:prefs:v1';
+
+/* Everything a key can be bound to. The last field is the factory default.
+   Escape, the arrow keys, Enter, Delete and Ctrl+Z are deliberately not in
+   here — they mean the same thing everywhere and are left alone. */
+const ACTIONS = [
+  ['add',      'Add people',              'n'],
+  ['newMan',   'New man',                 'w'],
+  ['newWoman', 'New woman',               'e'],
+  ['parents',  'Add parents',             'p'],
+  ['spouse',   'Add spouse',              'm'],
+  ['brother',  'Add brother',             'b'],
+  ['sister',   'Add sister',              'z'],
+  ['son',      'Add son',                 's'],
+  ['daughter', 'Add daughter',            'd'],
+  ['link',     'Link to someone here',    'l'],
+  ['detach',   'Detach selected',         'x'],
+  ['ego',      'Mark selection as Ego',   'g'],
+  ['arrange',  'Arrange mode',            'r'],
+  ['unpin',    'Unpin hand-placed people','u'],
+  ['tidy',     'Tidy loose people',       'a'],
+  ['fit',      'Fit to screen',           'f'],
+  ['smaller',  'Smaller names',           '['],
+  ['bigger',   'Bigger names',            ']'],
+  ['help',     'Show the shortcut list',  '?']
+];
+const defaultKeys = () => Object.fromEntries(ACTIONS.map(([id,,k]) => [id,k]));
+const FIXED_KEYS = [
+  ['Pick someone up',        'hold left'],
+  ['Move the canvas',        'middle-drag'],
+  ['\u2026 or',                 'Space-drag'],
+  ['Select a group',         'drag empty space'],
+  ['Add to the selection',   'Shift-click'],
+  ['Select everyone',        'Shift+A'],
+  ['Move between people',    '\u2190 \u2191 \u2193 \u2192'],
+  ['Swap a spouse\u2019s side',  'Shift \u2190 \u2192'],
+  ['Rename selected',        'Enter'],
+  ['Delete selected',        'Del'],
+  ['Undo',                   'Ctrl+Z']
+];
+const prettyKey = k => k === ' ' ? 'Space' : (k || '\u2014').toUpperCase();
+
+let prefs = { theme:'light', keys:defaultKeys() };
+function loadPrefs(){
+  try {
+    const raw = store.get(PREF_KEY);
+    if (raw){
+      const p = JSON.parse(raw);
+      if (p.theme === 'dark' || p.theme === 'light') prefs.theme = p.theme;
+      if (p.keys) prefs.keys = Object.assign(defaultKeys(), p.keys);
+    }
+  } catch {}
+}
+function savePrefs(){ try { store.set(PREF_KEY, JSON.stringify(prefs)); } catch {} }
+function applyTheme(){
+  document.documentElement.setAttribute('data-theme', prefs.theme);
+}
+const keyFor = id => prefs.keys[id] || '';
+const actionForKey = k => ACTIONS.map(a => a[0]).find(id => keyFor(id) === k);
+
+const PAD = 14;                       // breathing room between neighbouring labels
+
+/* How wide a person's writing actually is, so the layout can leave room for
+   it instead of assuming every name is the same size. */
+let mctx, mcache = {};
+function textW(str, size, bold, mono){
+  if (!str) return 0;
+  const key = size + '|' + (bold?1:0) + '|' + (mono?1:0) + '|' + str;
+  if (mcache[key] != null) return mcache[key];
+  try {
+    mctx = mctx || document.createElement('canvas').getContext('2d');
+    mctx.font = (bold ? '600 ' : '') + size + 'px ' +
+      (mono ? 'ui-monospace, monospace' : 'Instrument Sans, system-ui, sans-serif');
+    return mcache[key] = mctx.measureText(str).width;
+  } catch { return mcache[key] = str.length * size * 0.55; }
+}
+/* Every Ego on the chart, in the order they were added. Each one can record
+   what they call everybody else — a man's terms are written in blue, a
+   woman's in pink, so two sets never get mixed up. */
+const EGO_BLUE = '#2258C9', EGO_PINK = '#D6268F';
+const egoList = () => Object.keys(doc.people).filter(id => doc.people[id].ego);
+const egoInk = id => doc.people[id]?.gender === 'f' ? EGO_PINK
+               : doc.people[id]?.gender === 'm' ? EGO_BLUE : 'var(--ink-soft)';
+/* what each Ego calls this person, skipping the Ego's own entry */
+const termsFor = id => egoList().filter(e => e !== id)
+  .map(e => ({ ego:e, text:(doc.people[id]?.terms || {})[e] || '' }))
+  .filter(t => t.text.trim());
+
+function labelW(id){
+  const p = doc.people[id];
+  if (!p) return 0;
+  const fs = labelSize();
+  const name = p.name || (p.ego ? 'Ego' : 'Unnamed');
+  return Math.max(textW(name, fs, !!p.ego, false),
+    ...termsFor(id).map(t => textW(t.text, fs*0.8, false, false)));
+}
+/* Room a person needs on each side. Alone, their label is centred. Beside a
+   spouse it is hung outward instead — the marriage mark is a fixed width and
+   cannot be widened, so the only way to keep two names apart is to let them
+   grow away from each other. */
+const LABEL_ROOM = SPOUSE_GAP/2 - 12;   // clear air between two names in a couple
+function extentOf(id, place){
+  const half = labelW(id)/2;
+  const sym = Math.max(GAP/2, half + PAD/2);
+  if (place === 'mid' || half <= LABEL_ROOM) return { l:sym, r:sym };
+  const out = Math.max(GAP/2, labelW(id) - LABEL_ROOM + PAD/2);
+  return place === 'left' ? { l:out, r:LABEL_ROOM } : { l:LABEL_ROOM, r:out };
+}
+const labelSize = () => doc.fontSize || 13.5;
+
+/* The title has its own type, deliberately untouched by the name-size
+   control — it is a heading, not another label. */
+const TITLE_FONTS = [
+  ['display','Display',"'Space Grotesk', system-ui, sans-serif"],
+  ['sans',   'Sans',   "'Instrument Sans', system-ui, sans-serif"],
+  ['serif',  'Serif',  "Georgia, 'Times New Roman', serif"],
+  ['mono',   'Mono',   "'IBM Plex Mono', ui-monospace, monospace"]
+];
+const TITLE_MIN = 12, TITLE_MAX = 72;
+const titleFamily = () =>
+  (TITLE_FONTS.find(f => f[0] === (doc.titleFont || 'display')) || TITLE_FONTS[0])[2];
+const titleSize = () => doc.titleSize || 28;
+// how far the heading sits above the topmost symbol; grows with its own type
+const titleLift = topY => topY - NODE/2 - 52 - titleSize()*0.75;
+
+function normalise(d){
+  if (!d.fontSize) d.fontSize = 13.5;
+  if (typeof d.title !== 'string') d.title = '';
+  if (!d.colorNames || typeof d.colorNames !== 'object') d.colorNames = {};
+  if (!d.titleSize) d.titleSize = 28;
+  if (!d.titleFont) d.titleFont = 'display';
+  const uMap = { divorced:'divorce', separated:'unspecified',
+                 cohabitation:'illegitimate', dating:'illegitimate', unknown:'unspecified' };
+  for (const p of Object.values(d.people || {})){
+    if (p.ego === undefined) p.ego = false;
+    if (p.color === undefined) p.color = null;
+    if (p.ord === undefined) p.ord = null;
+    if (p.mx === undefined) p.mx = null;
+    if (p.side === undefined) p.side = null;
+    if (!p.terms || typeof p.terms !== 'object') p.terms = {};
+    if (p.fx === undefined) p.fx = (p.x != null ? p.x : (p.pos ? p.pos.x : 0));
+    if (p.fy === undefined) p.fy = p.pos ? p.pos.y : 0;
+    delete p.x; delete p.pos;
+  }
+  for (const u of Object.values(d.unions || {})){
+    if (uMap[u.type]) u.type = uMap[u.type];
+    for (const c of u.children){
+      if (c.link === 'foster') c.link = 'adopted';
+      if (c.twin === undefined) c.twin = false;
+    }
+  }
+  return d;
+}
+
+/* ------------------------------ layout --------------------------------- */
+
+function generations(){
+  const gen = {};
+  Object.keys(doc.people).forEach(id => gen[id] = 0);
+  const us = Object.values(doc.unions);
+  for (let i = 0; i < 80; i++){
+    let changed = false;
+    for (const u of us){
+      const ps = u.partners.filter(p => p && doc.people[p]);
+      const kids = u.children.filter(c => doc.people[c.id]);
+      if (!ps.length){
+        if (kids.length){
+          const g = Math.max(...kids.map(c => gen[c.id] ?? 0));
+          for (const c of kids) if (gen[c.id] !== g){ gen[c.id] = g; changed = true; }
+        }
+        continue;
+      }
+      const g = Math.max(...ps.map(p => gen[p] ?? 0));
+      for (const p of ps) if (gen[p] !== g){ gen[p] = g; changed = true; }
+      for (const c of kids) if ((gen[c.id] ?? 0) < g + 1){ gen[c.id] = g + 1; changed = true; }
+    }
+    if (!changed) break;
+  }
+  return gen;
+}
+
+/* Which generation counts as rank 0. Ego's, so the grid stays put as the
+   tree grows upward — otherwise every loose person lined up on a rule would
+   drift the moment somebody's parents got added. With several Egos, the
+   generation most of them share wins. */
+function egoBase(gen, ids){
+  gen = gen || generations();
+  ids = ids || Object.keys(doc.people).filter(isPlaced);
+  if (!ids.length) return 0;
+  const egos = ids.filter(id => doc.people[id].ego);
+  if (!egos.length) return Math.min(...ids.map(id => gen[id] ?? 0));
+  const tally = {};
+  egos.forEach(id => { const g = gen[id] ?? 0; tally[g] = (tally[g] || 0) + 1; });
+  return +Object.keys(tally).sort((a,b) => tally[b] - tally[a] || a - b)[0];
+}
+
+function layout(choice, log){
+  choice = choice || { swap:new Set(), sib:new Map(), rev:new Set() };
+  const all = Object.keys(doc.people);
+  if (!all.length) return { pos:{}, upos:{}, gen:{}, ranks:[] };
+
+  const gen = generations();
+  const ids = all.filter(isPlaced);
+  const visited = new Set(), usedUnions = new Set();
+  const G = { xs:{}, contour:new Map() };
+
+  /* Each branch is packed as a block that records how far left and right it
+     reaches at every rank. Blocks slide past each other, so branches can
+     never interpenetrate however lopsided the tree gets. */
+  const ext = {}, align = {};
+  const mark = (c,g,x,id,place) => {
+    let a = x - GAP/2, b = x + GAP/2;
+    if (id){
+      const e = extentOf(id, place || 'mid');
+      ext[id] = e; align[id] = place || 'mid';
+      a = x - e.l; b = x + e.r;
+    }
+    const q = c.get(g);
+    c.set(g, q ? [Math.min(q[0],a), Math.max(q[1],b)] : [a,b]);
+  };
+  const placeOf = (row,i) => row.length < 2 ? 'mid'
+    : i === 0 ? 'left' : i === row.length-1 ? 'right' : 'mid';
+  const absorb = (t,s,sh) => { for (const [g,[a,b]] of s){ const q = t.get(g);
+      t.set(g, q ? [Math.min(q[0],a+sh), Math.max(q[1],b+sh)] : [a+sh,b+sh]); } };
+  const fitRight = (base,sub,gap) => { let sh = -Infinity;
+      for (const [g,[a]] of sub){ const c = base.get(g); if (c) sh = Math.max(sh, c[1]+gap-a); }
+      return sh === -Infinity ? null : sh; };
+  const fitLeft = (base,sub,gap) => { let sh = Infinity;
+      for (const [g,[,b]] of sub){ const c = base.get(g); if (c) sh = Math.min(sh, c[0]-gap-b); }
+      return sh === Infinity ? null : sh; };
+  const hits = (base,sub,sh,gap) => { for (const [g,[a,b]] of sub){ const c = base.get(g);
+      if (c && a+sh < c[1]+gap && b+sh > c[0]-gap) return true; } return false; };
+  const nudge = (base, sub, want, gap) => {
+    if (!hits(base, sub, want, gap)) return want;
+    const c = [fitRight(base,sub,gap), fitLeft(base,sub,gap)].filter(v => v != null);
+    return c.length ? c.reduce((best,v) => Math.abs(v-want) < Math.abs(best-want) ? v : best) : want;
+  };
+
+  const spousesOf = p => [...new Set(unionsOf(p).map(u => u.partners.find(q => q && q !== p))
+                          .filter(q => q && doc.people[q]))];
+
+  /* Arrange mode writes an `ord` onto everyone in a sibling set, and a
+     `side` onto everyone sharing a household — a man and his two wives, or
+     a woman and the two men she married. Where the layout packs people side
+     by side it follows those, so a hand-made arrangement survives every
+     later redraw. */
+  const bySide = list => {
+    if (!list.some(q => doc.people[q]?.side != null)) return list;
+    const at = new Map(list.map((id,i) => [id,i]));
+    return list.slice().sort((a,b) => {
+      const x = doc.people[a].side, y = doc.people[b].side;
+      if (x != null && y != null) return x - y;
+      if (x != null) return -1;
+      if (y != null) return 1;
+      return at.get(a) - at.get(b);
+    });
+  };
+  const byOrd = list => list.map((id,i) => ({ id, i })).sort((a,b) => {
+    const x = doc.people[a.id]?.ord, y = doc.people[b.id]?.ord;
+    if (x != null && y != null) return x - y;
+    if (x != null) return -1;
+    if (y != null) return 1;
+    return a.i - b.i;
+  }).map(o => o.id);
+  // husband left, wife right
+  const husbandFirst = pair => pair.length === 2 && doc.people[pair[0]].gender === 'f'
+                          ? [pair[1], pair[0]] : pair;
+
+  /* One household in left-to-right order. Husband left, wife right by
+     default; `side` overrides it. With several spouses the person they all
+     married stays in the middle, so no marriage line has to reach over a
+     spouse to get to another. */
+  const memberRow = (p, mates) => {
+    let row;
+    if (mates.length <= 1)
+      row = bySide(doc.people[p].gender === 'f' ? [...mates, p] : [p, ...mates]);
+    else {
+      const sp = bySide(mates);
+      const half = Math.ceil(sp.length/2);
+      row = [...sp.slice(0,half), p, ...sp.slice(half)];
+    }
+    // husband left is only a preference — a household may turn round if that
+    // is what keeps the lines from crossing. A hand-set side always wins.
+    if (row.length > 1 && !row.some(q => doc.people[q]?.side != null)){
+      if (log) log.swaps.push(p);
+      if (choice.swap.has(p)) row = row.slice().reverse();
+    }
+    return row;
+  };
+
+  /* pack a list of people side by side, each with everything hanging off them */
+  function packList(list){
+    const xs = {}, contour = new Map();
+    let first = true;
+    for (const k of list){
+      if (visited.has(k) || !doc.people[k]) continue;
+      const b = grow(k);
+      const sh = first ? 0 : (fitRight(contour, b.contour, PAD) ?? 0);
+      first = false;
+      for (const id in b.xs) xs[id] = b.xs[id] + sh;
+      absorb(contour, b.contour, sh);
+    }
+    return { xs, contour };
+  }
+
+  /* offspring of every union belonging to these people */
+  /* `already` is a brood that has been positioned elsewhere — the set of
+     brothers and sisters we climbed up through. It takes no new placement,
+     but it has to sit in the running order so the half-sibling separation
+     below keeps the remaining broods clear of it. Without it, a mother's two
+     families were each laid out in ignorance of the other and their bars
+     ended up overlapping. */
+  function addBroods(members, xs, contour, already){
+    const broods = already ? [{ kids:already.kids, at:already.at, fixed:true }] : [];
+    for (const u of Object.values(doc.unions)){
+      if (usedUnions.has(u.id)) continue;
+      const ps = u.partners.filter(Boolean);
+      if (!ps.some(q => members.includes(q))) continue;
+      let kids = byOrd(u.children.map(c => c.id).filter(id => doc.people[id] && !visited.has(id)));
+      if (!kids.length) continue;
+      // a brood can be laid out either way round; whichever keeps a child who
+      // married out nearest their spouse is the one that avoids a crossing
+      if (kids.length > 1 && !kids.some(q => doc.people[q]?.ord != null)){
+        if (log) log.revs.push(u.id);
+        if (choice.rev.has(u.id)) kids = kids.slice().reverse();
+      }
+      usedUnions.add(u.id);
+      const anch = ps.filter(q => xs[q] !== undefined);
+      broods.push({ kids, at: anch.length ? anch.reduce((s,q) => s + xs[q], 0)/anch.length : 0,
+                    fixed:false });
+    }
+    broods.sort((a,b) => a.at - b.at);
+
+    /* Half-siblings: when someone has children by more than one partner,
+       each brood is pushed clear of the neighbouring union points instead of
+       being centred under its own. Centring makes a wide brood's sibling bar
+       run under the other union's descent line. */
+    const CLEAR = 58;
+    let barEnd = -Infinity;
+
+    broods.forEach((brood, i) => {
+      if (brood.fixed){                       // already placed; just claim its ground
+        const at = brood.kids.filter(k => xs[k] !== undefined).map(k => xs[k]);
+        barEnd = Math.max(barEnd, at.length ? Math.max(...at) : brood.at, brood.at);
+        return;
+      }
+      const grp = packList(brood.kids);
+      const kx = brood.kids.filter(k => grp.xs[k] !== undefined).map(k => grp.xs[k]);
+      if (!kx.length) return;
+      const lo = Math.min(...kx), hi = Math.max(...kx);
+      let sh = brood.at - (lo + hi)/2;
+
+      if (broods.length > 1){
+        const rightLimit = i < broods.length - 1 ? broods[i+1].at - CLEAR : Infinity;
+        if (hi + sh > rightLimit) sh = rightLimit - hi;
+        const leftLimit = Math.max(i > 0 ? broods[i-1].at + CLEAR : -Infinity, barEnd + GAP);
+        if (lo + sh < leftLimit) sh = leftLimit - lo;
+        if (hits(contour, grp.contour, sh, PAD)){
+          const r = fitRight(contour, grp.contour, PAD);
+          if (r != null && r > sh) sh = r;
+        }
+      } else sh = nudge(contour, grp.contour, sh, PAD);
+
+      for (const id in grp.xs) xs[id] = grp.xs[id] + sh;
+      absorb(contour, grp.contour, sh);
+      barEnd = Math.max(hi + sh, brood.at);
+    });
+  }
+
+  /* Walk UP from someone into their parents. This has to happen inside the
+     same block: build a person's ancestry as a separate block and anchor it
+     afterwards and it lands wherever there is room, which drags a family's
+     descent line right across the chart to reach its own child. */
+  function growUp(m, xs, contour){
+    const u = parentUnion(m);
+    if (!u || usedUnions.has(u.id)) return;
+    usedUnions.add(u.id);
+
+    // brothers and sisters go beside them, on the side away from any spouse
+    const sibs = byOrd(u.children.map(c => c.id).filter(id => doc.people[id] && !visited.has(id)));
+    const row = [m];
+    if (sibs.length){
+      const grp = packList(sibs);
+      const got = sibs.filter(k => grp.xs[k] !== undefined);
+      if (got.length){
+        const lo = Math.min(...got.map(k => grp.xs[k])), hi = Math.max(...got.map(k => grp.xs[k]));
+        let outward = xs[m] >= 0;
+        if (log){ log.sibs.push(m); log.sibDefault[m] = outward; }
+        if (choice.sib.has(m)) outward = choice.sib.get(m);
+        let sh = outward ? fitRight(contour, grp.contour, PAD) : fitLeft(contour, grp.contour, PAD);
+        if (sh == null) sh = outward ? xs[m] + GAP - lo : xs[m] - GAP - hi;
+        for (const id in grp.xs) xs[id] = grp.xs[id] + sh;
+        absorb(contour, grp.contour, sh);
+        got.forEach(k => row.push(k));
+      }
+    }
+
+    const par = husbandFirst(u.partners.filter(q => q && doc.people[q] && !visited.has(q)));
+    if (!par.length) return;
+
+    /* Lay out the parents as a whole household, not just this one couple.
+       A man with a second wife is usually met on the way up from a
+       grandchild, and placing the extra wife afterwards left her wherever
+       there happened to be room — so asking to move her did nothing. */
+    const anchor = par.reduce((a,b) =>
+      spousesOf(b).filter(q => !visited.has(q)).length >
+      spousesOf(a).filter(q => !visited.has(q)).length ? b : a);
+    const mates = spousesOf(anchor).filter(q => !visited.has(q) && q !== anchor);
+    const members = memberRow(anchor, mates);
+    members.forEach(q => visited.add(q));
+
+    // the couple whose children these are sits over the middle of them
+    const kx = row.filter(k => xs[k] !== undefined).map(k => xs[k]);
+    const midKid = (Math.min(...kx) + Math.max(...kx))/2;
+    const pb = { xs:{}, contour:new Map() };
+    const home = members.indexOf(anchor);
+    members.forEach((q,i) => { pb.xs[q] = (i - home)*SPOUSE_GAP;
+      mark(pb.contour, gen[q] ?? 0, pb.xs[q], q, placeOf(members,i)); });
+    const couple = par.filter(q => pb.xs[q] !== undefined);
+    const coupleMid = couple.length ? couple.reduce((s2,q) => s2 + pb.xs[q], 0)/couple.length : 0;
+    const psh = nudge(contour, pb.contour, midKid - coupleMid, PAD);
+    for (const q in pb.xs) xs[q] = pb.xs[q] + psh;
+    absorb(contour, pb.contour, psh);
+
+    // anyone else in the row married, then their other children, then their own parents
+    const fam = [...members];
+    for (const q of members){
+      for (const sp of spousesOf(q)){
+        if (visited.has(sp)) continue;
+        visited.add(sp);
+        const dir = xs[q] >= midKid ? 1 : -1;
+        let want = xs[q] + dir*SPOUSE_GAP;
+        const sb = { xs:{ [sp]:0 }, contour:new Map([[gen[sp] ?? 0, [0,0]]]) };
+        want = nudge(contour, sb.contour, want, SPOUSE_GAP);
+        xs[sp] = want; mark(contour, gen[sp] ?? 0, want, sp, 'mid');
+        fam.push(sp);
+      }
+    }
+    const through = par.filter(q => xs[q] !== undefined);
+    addBroods(fam, xs, contour, {
+      kids: row.filter(k => xs[k] !== undefined),
+      at: through.length ? through.reduce((s2,q) => s2 + xs[q], 0)/through.length : midKid
+    });
+    members.forEach(q => growUp(q, xs, contour));
+  }
+
+  /* one person, their spouses, their offspring, and their ancestry */
+  function grow(p){
+    visited.add(p);
+    const xs = {}, contour = new Map();
+    const spouses = spousesOf(p).filter(q => !visited.has(q));
+    spouses.forEach(q => visited.add(q));
+
+    const members = memberRow(p, spouses);
+    const base = members.indexOf(p);
+    members.forEach((m,i) => { xs[m] = (i-base)*SPOUSE_GAP;
+      mark(contour, gen[m] ?? 0, xs[m], m, placeOf(members,i)); });
+
+    addBroods(members, xs, contour);
+    members.forEach(m => growUp(m, xs, contour));
+    return { xs, contour };
+  }
+
+  /* Grow from the topmost generation downward. Two reasons, both learned the
+     hard way. Seeding from Ego made the whole arrangement re-grow from
+     somewhere else the moment you marked somebody, sliding half the chart
+     sideways while the rest stood still — Ego now decides the rank numbering
+     and nothing else. And seeding from the bottom reached a parent by
+     climbing up into them, which routes around the half-sibling separation
+     and let a mother's two families overlap. Growing downward keeps every
+     household's broods in one place where they can be held apart. */
+  const born = {};
+  Object.keys(doc.people).forEach((id,i) => { born[id] = i; });
+  const seeds = ids.slice().sort((a,b) =>
+    (gen[a] ?? 0) - (gen[b] ?? 0) || born[a] - born[b]);   // ties break on who was added first
+
+  const COMPONENT_GAP = Math.round(GAP * 1.7);
+  for (const seed of seeds){
+    if (visited.has(seed)) continue;
+    const block = grow(seed);
+    if (!Object.keys(block.xs).length) continue;
+    const sh = fitRight(G.contour, block.contour, COMPONENT_GAP) ?? 0;
+    for (const id in block.xs) G.xs[id] = block.xs[id] + sh;
+    absorb(G.contour, block.contour, sh);
+  }
+
+  const vals = Object.values(G.xs);
+  const mean = vals.length ? vals.reduce((s,v) => s+v, 0)/vals.length : 0;
+
+  const egoGen = egoBase(gen, ids);
+
+  const pos = {}, ranks = [], auto = {};
+  all.forEach(id => {
+    if (isPlaced(id)){
+      auto[id] = (G.xs[id] ?? 0) - mean;
+      // arrange mode can pin someone anywhere along their rank
+      pos[id] = { x: doc.people[id].mx ?? auto[id], y:((gen[id] ?? 0) - egoGen)*ROW_H };
+    } else {
+      auto[id] = doc.people[id].fx ?? 0;
+      pos[id] = { x: doc.people[id].fx ?? 0, y: doc.people[id].fy ?? 0 };
+    }
+  });
+
+  ids.forEach(id => { const r = (gen[id] ?? 0) - egoGen; if (!ranks.includes(r)) ranks.push(r); });
+
+  /* Hold every couple exactly one spouse-gap apart, so a marriage mark is
+     never asked to span more than its own width. Skipped where somebody
+     else stands between them — closing the gap there would drop the pair
+     on top of that person. */
+  for (const u of Object.values(doc.unions)){
+    const ps = u.partners.filter(q => q && pos[q]);
+    if (ps.length !== 2) continue;
+    const [a,b] = pos[ps[0]].x <= pos[ps[1]].x ? ps : [ps[1], ps[0]];
+    if (Math.abs(pos[b].x - pos[a].x - SPOUSE_GAP) < 0.5) continue;
+    const y = pos[a].y;
+    const blocked = all.some(q => !ps.includes(q) && isPlaced(q) && pos[q] &&
+      Math.abs(pos[q].y - y) < 1 && pos[q].x > pos[a].x + 1 && pos[q].x < pos[b].x - 1);
+    if (blocked) continue;
+    const mid = (pos[a].x + pos[b].x)/2;
+    pos[a].x = mid - SPOUSE_GAP/2;
+    pos[b].x = mid + SPOUSE_GAP/2;
+  }
+
+  const upos = {};
+  for (const u of Object.values(doc.unions)){
+    const ps = u.partners.filter(p => p && pos[p]);
+    if (ps.length)
+      upos[u.id] = { x: ps.reduce((s,p)=>s+pos[p].x,0)/ps.length,
+                     y: ps.reduce((s,p)=>s+pos[p].y,0)/ps.length };
+    else {
+      const kids = u.children.filter(c => pos[c.id]);
+      if (!kids.length) continue;
+      upos[u.id] = { x: kids.reduce((s,c)=>s+pos[c.id].x,0)/kids.length,
+                     y: Math.min(...kids.map(c => pos[c.id].y)) - ROW_H/2 };
+    }
+  }
+  return { pos, upos, gen, ranks, auto, ext, align };
+}
+
+/* Hunt for an arrangement with no crossings. Start from however the chart
+   is already arranged so it stays put, then try turning individual
+   households round or sending a set of brothers and sisters the other way,
+   keeping only changes that actually remove a crossing. If none of it gets
+   to zero, keep the best found and leave the rest for the user to nudge by
+   hand rather than reshuffling the whole chart on every edit. */
+let SOLVED = { sig:null, choice:{ swap:new Set(), sib:new Map(), rev:new Set() }, score:0 };
+
+function structureSig(){
+  return JSON.stringify([
+    Object.keys(doc.people).sort().map(id => {
+      const p = doc.people[id];
+      return [id, p.gender, p.side, p.ord, isPlaced(id)];
+    }),
+    Object.values(doc.unions).map(u => [u.id, u.partners, u.children.map(c => c.id)]),
+    doc.fontSize
+  ]);
+}
+
+function solveLayout(){
+  const sig = structureSig();
+  if (SOLVED.sig === sig) return SOLVED.choice;
+
+  const copy = c => ({ swap:new Set(c.swap), sib:new Map(c.sib), rev:new Set(c.rev) });
+  const log = { swaps:[], sibs:[], revs:[], sibDefault:{} };
+  let best = copy(SOLVED.choice);                 // carry on from where we were
+  let r = layout(best, log);
+  let score = countCrossings(r);
+
+  const keys = [...new Set(log.swaps)].map(id => ['swap', id])
+    .concat([...new Set(log.sibs)].map(id => ['sib', id]))
+    .concat([...new Set(log.revs)].map(id => ['rev', id]));
+  let budget = 400;
+
+  for (let pass = 0; pass < 4 && score > 0 && budget > 0; pass++){
+    let better = false;
+    for (const [kind, id] of keys){
+      if (score === 0 || budget-- <= 0) break;
+      const trial = copy(best);
+      if (kind === 'swap'){
+        trial.swap.has(id) ? trial.swap.delete(id) : trial.swap.add(id);
+      } else if (kind === 'rev'){
+        trial.rev.has(id) ? trial.rev.delete(id) : trial.rev.add(id);
+      } else {
+        const now = trial.sib.has(id) ? trial.sib.get(id) : log.sibDefault[id];
+        trial.sib.set(id, !now);
+      }
+      const got = countCrossings(layout(trial));
+      if (got < score){ best = trial; score = got; better = true; }
+    }
+    if (!better) break;
+  }
+
+  SOLVED = { sig, choice:best, score };
+  return best;
+}
+
+/* Where horizontal lines run into each other: a marriage line passing over
+   somebody else's head, or two sibling bars sharing a height and overlapping
+   so they read as one. These are the things the arrangement tries to avoid. */
+function countCrossings(r){
+  const { pos, upos } = r;
+  let n = 0;
+  const placed = Object.keys(pos).filter(isPlaced);
+
+  for (const u of Object.values(doc.unions)){
+    const ps = u.partners.filter(q => q && pos[q]);
+    if (ps.length !== 2) continue;
+    const lo = Math.min(pos[ps[0]].x, pos[ps[1]].x), hi = Math.max(pos[ps[0]].x, pos[ps[1]].x);
+    const y = pos[ps[0]].y;
+    for (const q of placed){
+      if (ps.includes(q)) continue;
+      if (Math.abs(pos[q].y - y) < 1 && pos[q].x > lo + 1 && pos[q].x < hi - 1) n++;
+    }
+  }
+
+  const bars = [];
+  for (const u of Object.values(doc.unions)){
+    const up = upos[u.id], kids = u.children.filter(c => pos[c.id]);
+    if (!up || !kids.length) continue;
+    const ps = u.partners.filter(q => q && pos[q]);
+    const xs = kids.map(c => pos[c.id].x).concat(ps.length ? [up.x] : []);
+    bars.push({ y:up.y, lo:Math.min(...xs), hi:Math.max(...xs) });
+  }
+  for (let i = 0; i < bars.length; i++)
+    for (let j = i+1; j < bars.length; j++){
+      if (Math.abs(bars[i].y - bars[j].y) > 1) continue;
+      if (Math.min(bars[i].hi, bars[j].hi) - Math.max(bars[i].lo, bars[j].lo) > 1) n++;
+    }
+  return n;
+}
+
+/* --------------------------- symbol drawing ---------------------------- */
+
+/* Outline takes the person's chosen colour. Ego stays filled solid black
+   whatever the outline is. */
+function symbolSvg(p, isSel, opts = {}){
+  const h = (opts.size ?? NODE)/2;
+  const sw = opts.sw ?? (isSel ? 4.9 : 4.3);   // heavy enough to read the colour at a glance
+  const filled = !!p.ego;
+  const stroke = opts.stroke ?? (p.color || 'var(--ink)');   // untouched people follow the theme
+  const paper  = opts.paper ?? 'var(--paper)';
+  // Ego is filled solid in ink; the outline keeps whatever colour it was set to
+  const fill   = filled ? (opts.egoFill ?? 'var(--ink)') : paper;
+  let s = '';
+  if (isSel) s += '<circle r="'+(h+13)+'" fill="none" stroke="var(--accent)" stroke-width="2.5"/>';
+  if (p.gender === 'm'){
+    const w = h*1.16, base = h*0.84, apex = h*1.12;
+    s += '<polygon points="0,'+(-apex)+' '+(-w)+','+base+' '+w+','+base+
+         '" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'" stroke-linejoin="round"/>';
+  } else if (p.gender === 'f'){
+    s += '<circle r="'+(h*0.92)+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'"/>';
+  } else {
+    s += '<polygon points="0,'+(-h)+' '+h+',0 0,'+h+' '+(-h)+
+         ',0" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'" stroke-dasharray="5 4"/>';
+  }
+  if (p.deceased){
+    s += '<line x1="'+(-h-5)+'" y1="'+(h+5)+'" x2="'+(h+5)+'" y2="'+(-h-5)+
+         '" stroke="'+(filled ? paper : stroke)+'" stroke-width="3.6"/>';
+  }
+  return s;
+}
+
+/* A marriage is one fixed size. It is drawn at the width it has when a
+   couple sit their normal distance apart and never stretches — if the two
+   ever drift, the mark stays the same and simply centres between them. */
+const BAR_W = SPOUSE_GAP - NODE - 6;
+function unionSvg(type, x1, x2, y){
+  const L = Math.min(x1,x2), R = Math.max(x1,x2);
+  const inset = NODE/2 + 3, a = L + inset, b = R - inset;
+  if (b - a < 2) return '';
+  const mid = (a+b)/2;
+  const w = Math.min(BAR_W, b - a), gl = mid - w/2, gr = mid + w/2;
+  const line = (ax,ay,bx,by,dash) => '<line x1="'+ax+'" y1="'+ay+'" x2="'+bx+'" y2="'+by+
+    '" stroke="var(--ink)" stroke-width="2"'+(dash?' stroke-dasharray="6 5"':'')+'/>';
+  if (type === 'illegitimate') return line(gl,y,gr,y,true);
+  if (type === 'unspecified')  return line(gl,y,gr,y,false);
+  let out = line(gl,y-4,gr,y-4) + line(gl,y+4,gr,y+4);
+  if (type === 'divorce') out += line(mid+7,y-11,mid-7,y+11);
+  return out;
+}
+
+function drawCanvas(){
+  const r = layout(solveLayout()); POS = r.pos; UPOS = r.upos; GEN = r.gen; AUTO = r.auto; EXT = r.ext;
+  world.innerHTML = buildScene(r, true);
+  world.setAttribute('transform','translate('+view.x+','+view.y+') scale('+view.k+')');
+  el('zLabel').textContent = Math.round(view.k*100)+'%';
+  el('tLabel').textContent = Math.round(labelSize());
+}
+
+/* The drawing itself. `live` adds the things that only belong on screen —
+   selection rings, the carried figure, the snap rule — so the PDF can use
+   exactly the same code and never drift out of step with the canvas. */
+function buildScene(r, live){
+  let out = '';
+
+  /* generation rules across the connected diagram only */
+  /* The title sits above the highest person and centred on the drawing, so
+     it follows the chart around as it grows. */
+  const seats = Object.values(POS);
+  if (seats.length){
+    const xs = seats.map(p => p.x), ys = seats.map(p => p.y);
+    const cx = (Math.min(...xs) + Math.max(...xs))/2;
+    const ty = titleLift(Math.min(...ys));
+    const size = titleSize();
+    const text = doc.title || '';
+    if (text || live){
+      const shown = text || 'Add a title';
+      const wide = textW(shown, size, true, /mono/i.test(titleFamily()));
+      out += '<g data-title="1" style="cursor:text">' +
+        '<rect x="'+(cx - wide/2 - 14)+'" y="'+(ty - size)+'" width="'+(wide + 28)+
+          '" height="'+(size*1.5)+'" fill="transparent"/>' +
+        '<text x="'+cx.toFixed(1)+'" y="'+ty.toFixed(1)+'" text-anchor="middle" font-size="'+size+
+        '" font-family="'+titleFamily()+'" font-weight="700" fill="'+
+        (text ? 'var(--ink)' : 'var(--ink-soft)')+'" opacity="'+(text ? 1 : .45)+
+        '" stroke="var(--paper)" stroke-linejoin="round" paint-order="stroke" stroke-width="'+
+        (size*0.28).toFixed(1)+'">'+esc(shown)+'</text></g>';
+    }
+  }
+
+  const rankName = g => g === 0 ? 'G0' : (g < 0 ? 'G+' + (-g) : 'G-' + g);
+  const box = svg.getBoundingClientRect();
+  const wLeft = (0 - view.x)/view.k, wRight = (box.width - view.x)/view.k;
+  const placed = Object.keys(POS).filter(isPlaced);
+  if (placed.length){
+    const xs = placed.map(id => POS[id].x);
+    const L = Math.min(...xs) - 80, R = Math.max(...xs) + 80;
+    for (const g of r.ranks){
+      const y = g*ROW_H;
+      out += '<line x1="'+L+'" y1="'+y+'" x2="'+R+'" y2="'+y+'" stroke="var(--rule)" stroke-width="1"/>' +
+             '<text x="'+(L-14)+'" y="'+(y+4)+'" text-anchor="end" font-size="11" font-family="var(--mono)" ' +
+             'fill="var(--ink-soft)" opacity=".65">'+rankName(g)+'</text>';
+    }
+  }
+  // guides while arranging: the line you're aligning to, and the rank you'd land on
+  if (live && adrag){
+    const ys = Object.values(POS).map(p => p.y);
+    const top = (ys.length ? Math.min(...ys) : 0) - 80, bot = (ys.length ? Math.max(...ys) : 0) + 80;
+    if (adrag.snap && adrag.snap.kind !== 'home')
+      out += '<line x1="'+adrag.snap.x+'" y1="'+top+'" x2="'+adrag.snap.x+'" y2="'+bot+
+             '" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="5 6" opacity=".9"/>';
+    if (adrag.snapRow != null)
+      out += '<line x1="'+wLeft+'" y1="'+(adrag.snapRow*ROW_H)+'" x2="'+wRight+'" y2="'+
+             (adrag.snapRow*ROW_H)+'" stroke="var(--accent)" stroke-width="2" opacity=".8"/>';
+  }
+
+  // the rule someone is being dropped onto
+  if (live && lift && lift.snapRow != null){
+    const y = lift.snapRow*ROW_H;
+    out += '<line x1="'+wLeft+'" y1="'+y+'" x2="'+wRight+'" y2="'+y+
+           '" stroke="var(--accent)" stroke-width="2" opacity=".8"/>' +
+           '<text x="'+(wLeft+14)+'" y="'+(y-9)+'" font-size="11.5" font-family="var(--mono)" ' +
+           'fill="var(--accent)">'+rankName(lift.snapRow)+'</text>';
+  }
+
+  for (const u of Object.values(doc.unions)){
+    const ps = u.partners.filter(p => p && POS[p]);
+    const up = UPOS[u.id];
+    if (!up) continue;
+    const kids = u.children.filter(c => POS[c.id]);
+    // every sibling bar in a generation shares one height
+    let busY = up.y + ROW_H/2 - 18;
+    if (kids.length)
+      busY = Math.min(busY, Math.min(...kids.map(c => POS[c.id].y)) - NODE/2 - 34);
+    if (ps.length === 2) out += unionSvg(u.type, POS[ps[0]].x, POS[ps[1]].x, up.y);
+
+    if (kids.length){
+      if (ps.length){
+        // with a single child the descent belongs to them alone, so it
+        // carries their line: an adopted only child is dotted all the way up
+        const solo = kids.length === 1 && kids[0].link === 'adopted';
+        out += '<line x1="'+up.x+'" y1="'+(up.y+8)+'" x2="'+up.x+'" y2="'+busY+
+               '" stroke="var(--ink)" stroke-width="1.8"' +
+               (solo ? ' stroke-dasharray="2 4"' : '') + '/>';
+      }
+      const twins = kids.filter(c => c.twin), singles = kids.filter(c => !c.twin);
+      const stops = singles.map(c => POS[c.id].x);
+      let apexX = null;
+      if (twins.length > 1){ apexX = twins.reduce((s,c)=>s+POS[c.id].x,0)/twins.length; stops.push(apexX); }
+      else if (twins.length === 1) stops.push(POS[twins[0].id].x);
+      if (ps.length) stops.push(up.x);        // the bar must always reach the descent line
+      if (stops.length > 1 && Math.max(...stops)-Math.min(...stops) > 0.5){
+        const bl = Math.min(...stops), br = Math.max(...stops);
+        // squared ends meet the outermost drop lines in a clean right angle
+        out += '<line x1="'+bl+'" y1="'+busY+'" x2="'+br+'" y2="'+busY+
+               '" stroke="var(--ink)" stroke-width="1.8" stroke-linecap="square"/>';
+      }
+      const dash = c => c.link === 'adopted' ? ' stroke-dasharray="2 4"' : '';
+      const drop = c => '<line x1="'+POS[c.id].x+'" y1="'+busY+'" x2="'+POS[c.id].x+'" y2="'+
+                        (POS[c.id].y-NODE/2-4)+'" stroke="var(--ink)" stroke-width="1.8"'+dash(c)+'/>';
+      singles.forEach(c => { out += drop(c); });
+      if (twins.length > 1){
+        const apexY = busY + 24;
+        out += '<line x1="'+apexX+'" y1="'+busY+'" x2="'+apexX+'" y2="'+apexY+
+               '" stroke="var(--ink)" stroke-width="1.8"/>';
+        twins.forEach(c => { out += '<line x1="'+apexX+'" y1="'+apexY+'" x2="'+POS[c.id].x+'" y2="'+
+          (POS[c.id].y-NODE/2-4)+'" stroke="var(--ink)" stroke-width="1.8"'+dash(c)+'/>'; });
+      } else if (twins.length === 1) out += drop(twins[0]);
+    }
+  }
+
+  const targetId = live ? lift?.target : null;
+  for (const p of Object.values(doc.people)){
+    const pt = POS[p.id]; if (!pt) continue;
+    const carried = live && lift && lift.id === p.id;
+    const terms = termsFor(p.id);
+    let g = '<g class="node" data-pid="'+p.id+'" transform="translate('+pt.x+','+pt.y+')">';
+    if (carried) g += '<circle r="'+(NODE/2+20)+'" fill="var(--accent)" opacity=".22"/>';
+    if (p.id === targetId) g += '<circle r="'+(NODE/2+17)+'" fill="none" stroke="var(--accent)" ' +
+                                'stroke-width="2" stroke-dasharray="4 4"/>';
+    if (live && arrange && p.mx != null)
+      g += '<circle cx="'+(NODE/2+8)+'" cy="'+(-NODE/2-8)+'" r="3.5" fill="var(--accent)"/>';
+    /* Names carry a halo of the page colour. A couple's descent line drops
+       from the midpoint between them — exactly where their two labels meet —
+       so without this it runs straight through the text. */
+    const halo = ' stroke="var(--paper)" stroke-linejoin="round" paint-order="stroke"';
+    const fsz = labelSize(), k = fsz/13.5;
+    // the first term tucks close under the name; further ones stack tighter still
+    const nameY = NODE/2 + 9 + fsz, termY = nameY + fsz*0.88;
+    /* Beside a spouse, a name too wide to sit centred is hung outward from
+       the midpoint instead, so the two grow apart rather than into each
+       other. The layout reserved the room for exactly this. */
+    const side = (r.align && r.align[p.id]) || 'mid';
+    const wide = labelW(p.id)/2 > LABEL_ROOM;
+    const anchor = (!wide || side === 'mid') ? 'middle' : side === 'left' ? 'end' : 'start';
+    const tx = anchor === 'middle' ? 0 : anchor === 'end' ? LABEL_ROOM : -LABEL_ROOM;
+    g += '<circle r="'+(NODE/2+14)+'" fill="transparent"/>' + symbolSvg(p, live && marked.has(p.id)) +
+      '<text x="'+tx.toFixed(1)+'" y="'+nameY.toFixed(1)+'" text-anchor="'+anchor+
+      '" font-size="'+fsz.toFixed(1)+'" font-family="var(--body)" ' +
+      'font-weight="'+(p.ego?'600':'500')+'" fill="'+(p.name?'var(--ink)':'var(--ink-soft)')+'"' +
+      halo + ' stroke-width="'+(4.5*k).toFixed(1)+'">' +
+      esc(p.name || (p.ego ? 'Ego' : 'Unnamed')) + '</text>' +
+      terms.map((t,n) =>
+        '<text x="'+tx.toFixed(1)+'" y="'+(termY + n*fsz*0.92).toFixed(1)+
+        '" text-anchor="'+anchor+'" font-size="'+(fsz*0.8).toFixed(1)+
+        '" font-family="var(--body)" font-style="italic" fill="'+egoInk(t.ego)+'"'+halo+
+        ' stroke-width="'+(3.5*k).toFixed(1)+'">'+esc(t.text)+'</text>').join('') + '</g>';
+    out += g;
+  }
+
+  return out;
+}
+
+/* ---------------------------- PDF export -------------------------------
+   A real vector PDF, written by hand — no libraries, so it still works
+   with the file sitting on a memory stick and no internet. The scene is
+   the same SVG the canvas draws; each line, circle, polygon and label is
+   walked and re-emitted as PDF drawing operators, scaled to fill one page.
+   ---------------------------------------------------------------------- */
+
+const PDF_COLOR = {
+  'var(--ink)':'#17211E', 'var(--paper)':'#FFFFFF', 'var(--rule)':'#DDE3DE',
+  'var(--ink-soft)':'#63736D', 'var(--accent)':'#D9A21B', 'var(--grid)':'#DBE1DD'
+};
+const hexRGB = h => {
+  const c = PDF_COLOR[h] || h;
+  if (!/^#[0-9a-f]{6}$/i.test(c)) return null;
+  return [1,3,5].map(i => parseInt(c.substr(i,2),16)/255);
+};
+
+let measureCtx;
+function textWidth(str, size, bold, mono, serif){
+  measureCtx = measureCtx || document.createElement('canvas').getContext('2d');
+  measureCtx.font = (bold ? '700 ' : '') + size + 'px ' +
+    (mono ? 'Courier New, monospace' : serif ? '"Times New Roman", Georgia, serif' : 'Helvetica, Arial');
+  return measureCtx.measureText(str).width;
+}
+
+/* PDF text is WinAnsi, so the few typographic characters that show up in
+   names and date ranges need mapping rather than truncating to junk. */
+const WIN_ANSI = { 0x20AC:0x80, 0x201A:0x82, 0x0192:0x83, 0x201E:0x84, 0x2026:0x85,
+  0x2020:0x86, 0x2021:0x87, 0x02C6:0x88, 0x2030:0x89, 0x0160:0x8A, 0x2039:0x8B,
+  0x0152:0x8C, 0x017D:0x8E, 0x2018:0x91, 0x2019:0x92, 0x201C:0x93, 0x201D:0x94,
+  0x2022:0x95, 0x2013:0x96, 0x2014:0x97, 0x02DC:0x98, 0x2122:0x99, 0x0161:0x9A,
+  0x203A:0x9B, 0x0153:0x9C, 0x017E:0x9E, 0x0178:0x9F };
+const pdfStr = str => {
+  let out = '';
+  for (const ch of String(str)){
+    let n = ch.codePointAt(0);
+    if (n > 255) n = WIN_ANSI[n] ?? 63;          // '?' for anything unmappable
+    const c = String.fromCharCode(n);
+    out += '\\()'.includes(c) ? '\\' + c : c;
+  }
+  return '(' + out + ')';
+};
+
+function exportPDF(){
+  if (!Object.keys(doc.people).length) return flash('Nothing to export yet');
+
+  const r = layout(solveLayout()); POS = r.pos; UPOS = r.upos; GEN = r.gen; AUTO = r.auto;
+  const svgText = '<svg xmlns="http://www.w3.org/2000/svg">' + buildScene(r, false) + '</svg>';
+  const nodes = [...new DOMParser().parseFromString(svgText,'image/svg+xml')
+                 .documentElement.querySelectorAll('line,circle,polygon,text')];
+
+  // ---- what the drawing occupies, including labels ----
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  const grow = (x,y) => { x0 = Math.min(x0,x); y0 = Math.min(y0,y); x1 = Math.max(x1,x); y1 = Math.max(y1,y); };
+  const at = (el, name) => parseFloat(el.getAttribute(name) || 0);
+  const shift = el => {                       // people sit inside a translated <g>
+    const t = el.parentNode?.getAttribute?.('transform');
+    const m = t && t.match(/translate\(([-\d.]+),([-\d.]+)\)/);
+    return m ? [parseFloat(m[1]), parseFloat(m[2])] : [0,0];
+  };
+  for (const el of nodes){
+    const [dx,dy] = shift(el);
+    if (el.tagName === 'line'){ grow(at(el,'x1')+dx, at(el,'y1')+dy); grow(at(el,'x2')+dx, at(el,'y2')+dy); }
+    else if (el.tagName === 'circle'){
+      if (el.getAttribute('fill') === 'transparent') continue;
+      const rr = at(el,'r');
+      grow(at(el,'cx')+dx-rr, at(el,'cy')+dy-rr); grow(at(el,'cx')+dx+rr, at(el,'cy')+dy+rr);
+    } else if (el.tagName === 'polygon'){
+      el.getAttribute('points').trim().split(/\s+/).forEach(p => {
+        const [px,py] = p.split(',').map(Number); grow(px+dx, py+dy);
+      });
+    } else {
+      const size = at(el,'font-size') || 12;
+      const fam = el.getAttribute('font-family') || '';
+      const w = textWidth(el.textContent, size, +(el.getAttribute('font-weight') || 400) >= 600,
+                          /mono/i.test(fam), /Georgia|Times/i.test(fam));
+      const a = el.getAttribute('text-anchor');
+      const tx = at(el,'x')+dx, ty = at(el,'y')+dy;
+      const left = a === 'middle' ? tx-w/2 : a === 'end' ? tx-w : tx;
+      grow(left, ty-size); grow(left+w, ty+size*0.3);
+    }
+  }
+  if (!isFinite(x0)) return flash('Nothing to export yet');
+
+  // ---- one page, orientation chosen to suit the chart ----
+  const wide = (x1-x0) >= (y1-y0);
+  const PW = wide ? 792 : 612, PH = wide ? 612 : 792, M = 40;
+  const sc = Math.min((PW-2*M)/Math.max(x1-x0,1), (PH-2*M)/Math.max(y1-y0,1));
+  const offX = (PW - (x1-x0)*sc)/2, offY = (PH - (y1-y0)*sc)/2;
+  const PX = x => offX + (x-x0)*sc;
+  const PY = y => PH - (offY + (y-y0)*sc);
+
+  const ops = [];
+  let curStroke = null, curFill = null, curDash = null, curWidth = null;
+  const setStroke = c => { const v = hexRGB(c); if (!v) return false;
+    const k = v.join(); if (k !== curStroke){ curStroke = k; ops.push(v.map(n=>n.toFixed(3)).join(' ')+' RG'); } return true; };
+  const setFill = c => { const v = hexRGB(c); if (!v) return false;
+    const k = v.join(); if (k !== curFill){ curFill = k; ops.push(v.map(n=>n.toFixed(3)).join(' ')+' rg'); } return true; };
+  const setDash = d => { const k = d || 'none';
+    if (k === curDash) return; curDash = k;
+    ops.push(d ? '['+d.trim().split(/[\s,]+/).map(n=>(parseFloat(n)*sc).toFixed(2)).join(' ')+'] 0 d' : '[] 0 d'); };
+  const setWidth = w => { const v = Math.max(0.35, w*sc);
+    if (v !== curWidth){ curWidth = v; ops.push(v.toFixed(2)+' w'); } };
+  let curCap = null;
+  const setCap = c => { const v = c === 'square' ? 2 : c === 'round' ? 1 : 0;
+    if (v !== curCap){ curCap = v; ops.push(v + ' J'); } };
+  const N = n => n.toFixed(2);
+
+  for (const el of nodes){
+    const [dx,dy] = shift(el);
+    const fill = el.getAttribute('fill'), stroke = el.getAttribute('stroke');
+    if (fill === 'transparent') continue;
+
+    if (el.tagName === 'text'){
+      const size = (at(el,'font-size') || 12) * sc;
+      const fam  = el.getAttribute('font-family') || '';
+      const mono = /mono/i.test(fam);
+      const serif = /Georgia|Times/i.test(fam);
+      const bold = +(el.getAttribute('font-weight') || 400) >= 600;
+      let col = fill || '#17211E';
+      const op = parseFloat(el.getAttribute('opacity') || 1);
+      let v = hexRGB(col) || [0,0,0];
+      if (op < 1) v = v.map(n => n*op + (1-op));       // fade toward the page
+      const w = textWidth(el.textContent, size, bold, mono, serif);
+      const a = el.getAttribute('text-anchor');
+      const tx = PX(at(el,'x')+dx), ty = PY(at(el,'y')+dy);
+      const px = a === 'middle' ? tx-w/2 : a === 'end' ? tx-w : tx;
+      const font = serif ? (bold ? '/F5' : '/F4')
+                 : mono  ? (bold ? '/F6' : '/F3')
+                 :         (bold ? '/F2' : '/F1');
+      const show = 'BT '+font+' '+N(size)+' Tf 1 0 0 1 '+N(px)+' '+N(ty)+' Tm ' +
+                   pdfStr(el.textContent)+' Tj ET';
+      curFill = null; curStroke = null; curWidth = null;
+
+      // halo first, as an outline in the page colour, then the letters on top
+      const ring = el.getAttribute('stroke'), ringW = parseFloat(el.getAttribute('stroke-width') || 0);
+      if (ring && ringW && hexRGB(ring)){
+        ops.push(hexRGB(ring).map(n=>n.toFixed(3)).join(' ')+' RG',
+                 N(Math.max(0.3, ringW*sc))+' w', '1 J', '1 j', '1 Tr', show, '0 Tr');
+        curCap = 1;
+      }
+      ops.push(v.map(n=>n.toFixed(3)).join(' ')+' rg', show);
+      continue;
+    }
+
+    const hasFill = fill && fill !== 'none' && hexRGB(fill);
+    const hasStroke = stroke && hexRGB(stroke);
+    if (!hasFill && !hasStroke) continue;
+    if (hasFill) setFill(fill);
+    if (hasStroke){
+      setStroke(stroke);
+      setWidth(parseFloat(el.getAttribute('stroke-width') || 1));
+      setCap(el.getAttribute('stroke-linecap'));
+    }
+    setDash(el.getAttribute('stroke-dasharray'));
+
+    if (el.tagName === 'line'){
+      ops.push(N(PX(at(el,'x1')+dx))+' '+N(PY(at(el,'y1')+dy))+' m '+
+               N(PX(at(el,'x2')+dx))+' '+N(PY(at(el,'y2')+dy))+' l S');
+    } else if (el.tagName === 'circle'){
+      const cx = PX(at(el,'cx')+dx), cy = PY(at(el,'cy')+dy), rr = at(el,'r')*sc, k = rr*0.5523;
+      ops.push(N(cx+rr)+' '+N(cy)+' m',
+        N(cx+rr)+' '+N(cy+k)+' '+N(cx+k)+' '+N(cy+rr)+' '+N(cx)+' '+N(cy+rr)+' c',
+        N(cx-k)+' '+N(cy+rr)+' '+N(cx-rr)+' '+N(cy+k)+' '+N(cx-rr)+' '+N(cy)+' c',
+        N(cx-rr)+' '+N(cy-k)+' '+N(cx-k)+' '+N(cy-rr)+' '+N(cx)+' '+N(cy-rr)+' c',
+        N(cx+k)+' '+N(cy-rr)+' '+N(cx+rr)+' '+N(cy-k)+' '+N(cx+rr)+' '+N(cy)+' c',
+        hasFill && hasStroke ? 'B' : hasFill ? 'f' : 'S');
+    } else {
+      const pts = el.getAttribute('points').trim().split(/\s+/)
+        .map(p => p.split(',').map(Number))
+        .map(([px,py]) => [PX(px+dx), PY(py+dy)]);
+      ops.push(N(pts[0][0])+' '+N(pts[0][1])+' m');
+      pts.slice(1).forEach(([px,py]) => ops.push(N(px)+' '+N(py)+' l'));
+      ops.push('h', hasFill && hasStroke ? 'B' : hasFill ? 'f' : 'S');
+    }
+  }
+
+  // ---- colour key, drawn in the page's own corner -----------------------
+  // Independent of the chart's own scale — a small fixed-size legend, same
+  // information as the on-screen panel, only for colours actually in use.
+  const keyItems = colorsInUse();
+  if (keyItems.length){
+    const rowH = 14, swatch = 9, padX = 22, baseY = 22;
+    const inkRGB = hexRGB(INK) || [0.09,0.13,0.12];
+    keyItems.forEach(([hex,fallback], i) => {
+      const label = colorLabel(hex) || fallback;
+      const y = baseY + (keyItems.length - 1 - i) * rowH;
+      const v = hexRGB(hex) || [0,0,0];
+      ops.push(v.map(n=>n.toFixed(3)).join(' ')+' rg',
+               N(padX)+' '+N(y)+' '+N(swatch)+' '+N(swatch)+' re f');
+      ops.push(inkRGB.map(n=>n.toFixed(3)).join(' ')+' rg',
+               'BT /F2 9 Tf 1 0 0 1 '+N(padX+swatch+5)+' '+N(y+1.6)+' Tm '+pdfStr(label)+' Tj ET');
+    });
+    curFill = null; curStroke = null; curWidth = null; curDash = null; curCap = null;
+  }
+
+  // ---- assemble the file ----
+  const content = '1 1 1 rg 0 0 '+PW+' '+PH+' re f\n' + ops.join('\n') + '\n';
+  const objs = [
+    '<</Type/Catalog/Pages 2 0 R>>',
+    '<</Type/Pages/Kids[3 0 R]/Count 1>>',
+    '<</Type/Page/Parent 2 0 R/MediaBox[0 0 '+PW+' '+PH+']/Resources<</Font<</F1 5 0 R/F2 6 0 R/F3 7 0 R/F4 8 0 R/F5 9 0 R/F6 10 0 R>>>>/Contents 4 0 R>>',
+    '<</Length '+content.length+'>>\nstream\n'+content+'endstream',
+    '<</Type/Font/Subtype/Type1/BaseFont/Helvetica/Encoding/WinAnsiEncoding>>',
+    '<</Type/Font/Subtype/Type1/BaseFont/Helvetica-Bold/Encoding/WinAnsiEncoding>>',
+    '<</Type/Font/Subtype/Type1/BaseFont/Courier/Encoding/WinAnsiEncoding>>',
+    '<</Type/Font/Subtype/Type1/BaseFont/Times-Roman/Encoding/WinAnsiEncoding>>',
+    '<</Type/Font/Subtype/Type1/BaseFont/Times-Bold/Encoding/WinAnsiEncoding>>',
+    '<</Type/Font/Subtype/Type1/BaseFont/Courier-Bold/Encoding/WinAnsiEncoding>>'
+  ];
+  let pdf = '%PDF-1.4\n';
+  const offsets = [];
+  objs.forEach((o,i) => { offsets.push(pdf.length); pdf += (i+1)+' 0 obj\n'+o+'\nendobj\n'; });
+  const xref = pdf.length;
+  pdf += 'xref\n0 '+(objs.length+1)+'\n0000000000 65535 f \n';
+  offsets.forEach(o => { pdf += String(o).padStart(10,'0')+' 00000 n \n'; });
+  pdf += 'trailer\n<</Size '+(objs.length+1)+'/Root 1 0 R>>\nstartxref\n'+xref+'\n%%EOF';
+
+  const bytes = new Uint8Array(pdf.length);
+  for (let i = 0; i < pdf.length; i++) bytes[i] = pdf.charCodeAt(i) & 0xFF;
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([bytes], { type:'application/pdf' }));
+  link.download = 'kinship.pdf';
+  link.click();
+  URL.revokeObjectURL(link.href);
+  flash('PDF saved');
+}
+
+/* ------------------------------ legend --------------------------------- */
+
+function buildKeyList(){
+  const rows = ACTIONS.filter(([id]) => keyFor(id))
+    .map(([id,label]) => '<div><span>'+label+'</span><kbd>'+prettyKey(keyFor(id))+'</kbd></div>')
+    .join('');
+  el('keys').innerHTML = rows + '<hr>' +
+    FIXED_KEYS.map(([l,k]) => '<div><span>'+l+'</span><kbd>'+k+'</kbd></div>').join('');
+}
+
+/* ---------------------------- settings --------------------------------- */
+let setTab = 'look', listening = null;
+
+function openSettings(){ el('settings').classList.remove('hide'); drawSettings(); }
+function closeSettings(){ listening = null; el('settings').classList.add('hide'); }
+
+function drawSettings(){
+  const body = el('setBody');
+  el('settings').querySelectorAll('.tab').forEach(t =>
+    t.classList.toggle('on', t.dataset.tab === setTab));
+
+  if (setTab === 'look'){
+    const strip = cols => '<div class="swatch-strip">' +
+      cols.map(c => '<i style="background:'+c+'"></i>').join('') + '</div>';
+    body.innerHTML =
+      '<h3>Appearance</h3>' +
+      '<p class="sheet-note">Changes the screen only. A saved PDF is always dark ink on white ' +
+      'paper, whichever you pick here.</p>' +
+      '<div class="themes">' +
+        '<button class="theme-pick" data-mode="light" aria-pressed="'+(prefs.theme==='light')+'">' +
+          '<b>Light</b>'+strip(['#F2F4F2','#DBE1DD','#63736D','#17211E'])+'</button>' +
+        '<button class="theme-pick" data-mode="dark" aria-pressed="'+(prefs.theme==='dark')+'">' +
+          '<b>Dark</b>'+strip(['#141918','#2B3633','#8CA098','#E7EDEA'])+'</button>' +
+      '</div>';
+    body.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => {
+      prefs.theme = b.dataset.mode; savePrefs(); applyTheme(); drawSettings();
+      flash(prefs.theme === 'dark' ? 'Dark mode' : 'Light mode');
+    }));
+    return;
+  }
+
+  body.innerHTML =
+    '<h3>Shortcuts</h3>' +
+    '<p class="sheet-note">Click a key to change it, then press the one you want. ' +
+    'Escape cancels, Backspace clears it. Taking a key from another action leaves that one blank.</p>' +
+    ACTIONS.map(([id,label]) =>
+      '<div class="keyrow"><span>'+label+'</span>' +
+      '<button class="keycap'+(listening===id?' listening':'')+(keyFor(id)?'':' none')+
+      '" data-key="'+id+'">' +
+      (listening === id ? 'press a key' : prettyKey(keyFor(id))) + '</button></div>').join('') +
+    '<div class="sheet-foot"><button class="btn" id="keysReset">Back to defaults</button></div>';
+
+  body.querySelectorAll('[data-key]').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    listening = listening === b.dataset.key ? null : b.dataset.key;
+    drawSettings();
+  }));
+  el('keysReset').addEventListener('click', () => {
+    prefs.keys = defaultKeys(); savePrefs(); buildKeyList(); listening = null;
+    drawSettings(); flash('Shortcuts back to defaults');
+  });
+}
+
+/* while a key is being captured, the next press is the new binding */
+function captureKey(e){
+  if (!listening) return false;
+  e.preventDefault(); e.stopPropagation();
+  const id = listening;
+  if (e.key === 'Escape'){ listening = null; drawSettings(); return true; }
+  if (e.key === 'Backspace' || e.key === 'Delete'){
+    prefs.keys[id] = ''; listening = null; savePrefs(); buildKeyList(); drawSettings();
+    return true;
+  }
+  const k = e.key.toLowerCase();
+  if (k.length !== 1 || e.ctrlKey || e.metaKey || e.altKey){
+    flash('Use a single key, without Ctrl or Alt'); return true;
+  }
+  const taken = ACTIONS.find(([a]) => a !== id && keyFor(a) === k);
+  if (taken) prefs.keys[taken[0]] = '';
+  prefs.keys[id] = k;
+  listening = null; savePrefs(); buildKeyList(); drawSettings();
+  flash(taken ? prettyKey(k) + ' taken from \u201c' + taken[1] + '\u201d' : 'Set to ' + prettyKey(k));
+  return true;
+}
+
+/* ------------------------------ title ---------------------------------- */
+function titleAnchor(){
+  const seats = Object.values(POS);
+  if (!seats.length) return null;
+  const xs = seats.map(p => p.x), ys = seats.map(p => p.y);
+  return { x:((Math.min(...xs) + Math.max(...xs))/2)*view.k + view.x,
+           y:titleLift(Math.min(...ys))*view.k + view.y };
+}
+
+function openTitle(){
+  if (!titleAnchor()) return flash('Add somebody first');
+  closeAdder();                       // they share the same corner
+  const c = el('titleCard');
+  el('titleText').value = doc.title || '';
+  el('titleSizeLabel').textContent = Math.round(titleSize());
+  el('titleFonts').innerHTML = TITLE_FONTS.map(([id,label,fam]) =>
+    '<button data-font="'+id+'" aria-pressed="'+((doc.titleFont||'display')===id)+
+    '" style="font-family:'+fam+'">'+label+'</button>').join('');
+  el('titleFonts').querySelectorAll('[data-font]').forEach(b =>
+    b.addEventListener('click', () => {
+      commit(() => { doc.titleFont = b.dataset.font; });
+      openTitle();
+    }));
+  c.classList.remove('hide');
+  el('titleText').focus();
+}
+function closeTitle(){ el('titleCard').classList.add('hide'); }
+
+function setTitleSize(n){
+  const v = Math.max(TITLE_MIN, Math.min(TITLE_MAX, Math.round(n)));
+  if (v === Math.round(titleSize())) return;
+  commit(() => { doc.titleSize = v; });
+  el('titleSizeLabel').textContent = v;
+}
+
+/* -------------------------------- slots --------------------------------- */
+let slotArm = null;
+
+function slotPreview(n){
+  const data = n === slots.active ? doc : readSlot(n);
+  if (!data || !data.people || !Object.keys(data.people).length) return { count:0, title:'' };
+  return { count:Object.keys(data.people).length, title:data.title || '' };
+}
+
+function openSlots(){ el('slotsSheet').classList.remove('hide'); drawSlots(); }
+function closeSlots(){ slotArm = null; el('slotsSheet').classList.add('hide'); }
+
+function drawSlots(){
+  const body = el('slotsBody');
+  body.innerHTML =
+    '<p class="sheet-note">Three separate charts, saved on this device. ' +
+    'Switching writes down what you have open, then loads the one you pick.</p>' +
+    Array.from({ length:SLOT_COUNT }, (_,n) => {
+      const p = slotPreview(n);
+      const isActive = n === slots.active;
+      const desc = p.count ? (p.title ? esc(p.title) + ' \u2014 ' : '') +
+                     p.count + (p.count === 1 ? ' person' : ' people') : 'Empty';
+      return '<div class="slotrow'+(isActive?' on':'')+'">' +
+        '<input class="in slotname" data-slot="'+n+'" value="'+esc(slots.names[n])+'" maxlength="40">' +
+        '<span class="slotdesc">'+desc+'</span>' +
+        (isActive ? '<span class="slotcur">Open now</span>'
+                  : '<button class="btn" data-open="'+n+'">Open</button>') +
+        (p.count && !isActive ? '<button class="btn ghost danger" data-wipe="'+n+'">'+
+          (slotArm===n ? 'Sure?' : 'Clear')+'</button>' : '') +
+        '</div>';
+    }).join('');
+
+  body.querySelectorAll('[data-slot]').forEach(inp => inp.addEventListener('input', () => {
+    slots.names[+inp.dataset.slot] = inp.value || ('Chart ' + (+inp.dataset.slot + 1));
+    saveSlots();
+  }));
+  body.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => switchSlot(+b.dataset.open)));
+  body.querySelectorAll('[data-wipe]').forEach(b => b.addEventListener('click', () => {
+    const n = +b.dataset.wipe;
+    if (slotArm !== n){ slotArm = n; drawSlots(); return; }
+    writeSlot(n, { people:{}, unions:{}, fontSize:13.5 });
+    slotArm = null; drawSlots(); flash(slots.names[n] + ' cleared');
+  }));
+}
+
+function switchSlot(n){
+  if (n === slots.active) return;
+  save();                                  // keep whatever is open right now
+  slots.active = n; saveSlots();
+  const found = readSlot(n);
+  doc = found?.people ? normalise(found) : { people:{}, unions:{}, fontSize:13.5 };
+  history = []; selected = null; marked = new Set(); linkArm = null; lift = null;
+  closeSlots();
+  buildKey();                              // the colour labels belong to this chart
+  select(null); fit();
+  flash('Switched to ' + slots.names[n]);
+}
+
+function buildLegend(){
+  const mini = i => '<svg width="32" height="24" viewBox="-16 -12 32 24">'+i+'</svg>';
+  const P = (g,o) => symbolSvg(Object.assign({gender:g,deceased:false,ego:false},o||{}), false,
+    { size:18, sw:2.4, stroke:'var(--panel-text)', paper:'transparent', egoFill:'var(--panel-text)' });
+  const b = 'stroke="var(--panel-text)" stroke-width="1.6"';
+  const items = [
+    [P('m'),'Male'], [P('f'),'Female'], [P('m',{ego:true}),'Ego'], [P('f',{deceased:true}),'Death'],
+    ['<line x1="-12" y1="-3" x2="12" y2="-3" '+b+'/><line x1="-12" y1="3" x2="12" y2="3" '+b+'/>','Marriage'],
+    ['<line x1="-12" y1="-3" x2="12" y2="-3" '+b+'/><line x1="-12" y1="3" x2="12" y2="3" '+b+
+      '/><line x1="5" y1="-9" x2="-5" y2="9" '+b+'/>','Divorce'],
+    ['<line x1="-12" y1="0" x2="12" y2="0" '+b+' stroke-dasharray="5 4"/>','Illegitimate'],
+    ['<line x1="0" y1="-10" x2="0" y2="10" '+b+'/>','Offspring'],
+    ['<line x1="0" y1="-10" x2="0" y2="10" '+b+' stroke-dasharray="2 3.5"/>','Adoption'],
+    ['<line x1="0" y1="-10" x2="-8" y2="10" '+b+'/><line x1="0" y1="-10" x2="8" y2="10" '+b+'/>','Twins'],
+    ['<line x1="-12" y1="-2" x2="12" y2="-2" '+b+'/><line x1="-8" y1="-2" x2="-8" y2="9" '+b+
+      '/><line x1="8" y1="-2" x2="8" y2="9" '+b+'/>','Siblings']
+  ];
+  el('legend').innerHTML = '<h3>Symbol key</h3><ul>' +
+    items.map(([s,l]) => '<li>'+mini(s)+'<span>'+l+'</span></li>').join('') + '</ul>';
+}
+
+/* ------------------------------ panel ---------------------------------- */
+
+function drawPanel(){
+  const panel = el('panel');
+  const p = doc.people[selected];
+  if (!p || lift || gdrag || linkArm || marked.size > 1){ panel.classList.add('hide'); return; }
+  panel.classList.remove('hide');
+
+  const pu = parentUnion(p.id);
+  const link = pu?.children.find(c => c.id === p.id);
+  const mine = unionsOf(p.id);
+  const hasParents = !!pu && pu.partners.filter(Boolean).length > 0;
+  const sibs = pu ? pu.children.length - 1 : 0;
+  const kids = mine.reduce((n,u) => n + u.children.length, 0);
+  const loose = !isPlaced(p.id);
+
+  const seg = (n,o,c) => '<div class="seg">' + o.map(([v,l]) =>
+    '<button data-'+n+'="'+v+'" aria-pressed="'+(c===v)+'">'+l+'</button>').join('') + '</div>';
+
+  panel.innerHTML =
+    '<button class="close" data-act="close">&times;</button>' +
+    '<div class="sec"><h2>Person</h2>' +
+      '<div class="field"><label for="f-name">Name</label>' +
+        '<input id="f-name" class="in" value="'+esc(p.name)+'" placeholder="Who is this?"></div>' +
+      '<div class="field"><label>Sex</label>'+seg('gender',[['m','Male'],['f','Female'],['u','Unknown']],p.gender)+'</div>' +
+      '<div class="field"><label>Outline colour</label>'+swatchRow(colorOf(p))+'</div>' +
+      (() => {
+        const egos = egoList().filter(e => e !== p.id);
+        if (!egos.length)
+          return '<p class="term-none">Mark somebody as Ego to record what they call people.</p>';
+        return '<div class="field"><label>Kin terms</label>' + egos.map(e =>
+          '<div class="termrow"><i style="color:'+egoInk(e)+'">' +
+            esc(nameOf(e)) + ' calls them</i>' +
+          '<input class="in" data-term="'+e+'" value="'+esc((p.terms||{})[e] || '')+
+            '" placeholder="uncle, FaBr, \u2026" style="color:'+egoInk(e)+'"></div>').join('') +
+          '</div>';
+      })() +
+      '<label class="check"><input type="checkbox" id="f-dec" '+(p.deceased?'checked':'')+'> Deceased</label>' +
+      '<label class="check"><input type="checkbox" id="f-ego" '+(p.ego?'checked':'')+
+        '> Ego <span style="color:#8C9C96;font-size:11.5px">&mdash; you can mark several</span></label>' +
+    '</div>' +
+
+    '<div class="sec"><h2>Kin</h2>' +
+      (loose
+        ? '<div class="rel">Not connected to anyone yet. Hold the left button on them, then drop them on someone.</div>'
+        : '<div class="rel">' +
+            (hasParents ? 'Child of <b>'+pu.partners.filter(Boolean).map(q=>esc(nameOf(q))).join(' &amp; ')+'</b>'
+             : pu ? 'In a sibling set, parents not recorded' : 'No parents recorded') +
+            (sibs ? ' &middot; '+sibs+' sibling'+(sibs===1?'':'s') : '') +
+            (kids ? ' &middot; '+kids+' child'+(kids===1?'':'ren') : '') + '</div>') +
+      (pu ? '<div class="field"><label>Descent</label>' +
+              seg('link',[['bio','Birth'],['adopted','Adopted']], link?.link)+'</div>' +
+            '<label class="check"><input type="checkbox" id="f-twin" '+(link?.twin?'checked':'')+
+              '> One of a set of twins</label>' : '') +
+      mine.map(u => {
+        const o = u.partners.find(q => q && q !== p.id);
+        return '<div class="field"><label>With '+(o?esc(nameOf(o)):'unknown')+' &middot; '+
+          u.children.length+' '+(u.children.length===1?'child':'children')+'</label>' +
+          '<select class="in" data-union="'+u.id+'">'+UNION_TYPES.map(([v,l]) =>
+            '<option value="'+v+'"'+(u.type===v?' selected':'')+'>'+l+'</option>').join('')+'</select></div>';
+      }).join('') +
+      (matesOf(p.id).length
+        ? '<div class="rel">Side by side: <b>' +
+            householdOf(p.id).slice().sort((a,b)=>(POS[a]?.x??0)-(POS[b]?.x??0))
+              .map(q => esc(nameOf(q))).join(' &middot; ') + '</b><br>' +
+            'Move ' + esc(nameOf(p.id)) + ' <button class="lnk" data-act="sideL">left</button>' +
+            ' or <button class="lnk" data-act="sideR">right</button></div>'
+        : '') +
+      '<div class="rel" style="margin-top:4px">Add new: ' +
+        (hasParents ? '' : '<button class="lnk" data-act="parents">parents</button> &middot; ') +
+        '<button class="lnk" data-act="brother">brother</button> &middot; ' +
+        '<button class="lnk" data-act="sister">sister</button> &middot; ' +
+        '<button class="lnk" data-act="partner">spouse</button> &middot; ' +
+        '<button class="lnk" data-act="son">son</button> &middot; ' +
+        '<button class="lnk" data-act="daughter">daughter</button></div>' +
+      '<div class="rel"><button class="lnk" data-act="link">Link to someone already here&hellip;</button>' +
+        ' <span style="color:#6C7C76">keeps every existing tie</span></div>' +
+    '</div>' +
+
+    '<div class="sec"><h2>Notes</h2><textarea id="f-notes" class="in" ' +
+      'placeholder="Terms of address, obligations, anything worth remembering.">'+esc(p.notes)+'</textarea></div>' +
+
+    '<div class="sec" style="display:flex;gap:8px">' +
+      '<button class="btn" data-act="unpin" style="flex:1"'+(p.mx==null?' disabled':'')+'>Unpin</button>' +
+      '<button class="btn" data-act="detach" style="flex:1"'+(loose?' disabled':'')+'>Detach</button>' +
+      '<button class="btn danger" data-act="del" style="flex:1">Delete</button></div>';
+
+  const live = (id,apply) => { const n = el(id); if (!n) return;
+    n.addEventListener('input', () => { apply(n); save(); drawCanvas(); placeRing(); }); };
+  live('f-name',  n => { p.name = n.value; });
+  panel.querySelectorAll('[data-term]').forEach(n =>
+    n.addEventListener('input', () => {
+      p.terms = p.terms || {};
+      if (n.value.trim()) p.terms[n.dataset.term] = n.value;
+      else delete p.terms[n.dataset.term];
+      save(); drawCanvas(); placeRing();
+    }));
+  live('f-notes', n => { p.notes = n.value; });
+  el('f-dec').addEventListener('change', e => { p.deceased = e.target.checked; save(); drawCanvas(); });
+  el('f-ego').addEventListener('change', () => setEgo(p.id));
+  const tw = el('f-twin');
+  if (tw) tw.addEventListener('change', e => commit(() => {
+    const l = parentUnion(p.id)?.children.find(c => c.id === p.id); if (l) l.twin = e.target.checked; }));
+
+  panel.querySelectorAll('[data-color]').forEach(b =>
+    b.addEventListener('click', () => applyColor(b.dataset.color)));
+  panel.querySelectorAll('[data-gender]').forEach(b =>
+    b.addEventListener('click', () => commit(() => { p.gender = b.dataset.gender; })));
+  panel.querySelectorAll('[data-link]').forEach(b =>
+    b.addEventListener('click', () => commit(() => { if (link) link.link = b.dataset.link; })));
+  panel.querySelectorAll('[data-union]').forEach(s =>
+    s.addEventListener('change', () => commit(() => { doc.unions[s.dataset.union].type = s.value; })));
+  panel.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => {
+    ({ parents:addParents, partner:addPartner, brother:()=>addSibling('m'), sister:()=>addSibling('f'),
+       son:()=>addChild('m'), daughter:()=>addChild('f'), close:()=>select(null),
+       link:()=>{ ringMode = 'link'; render(); },
+       unpin:()=>freePinned([p.id]),
+       sideL:()=>shiftSide(p.id,-1), sideR:()=>shiftSide(p.id,1),
+       detach:()=>{ commit(()=>{ cutFree(p.id); }); flash(nameOf(p.id)+' is loose again'); },
+       del:removeSelected }[b.dataset.act] || (()=>{}))();
+  }));
+
+  if (focusName){ const n = el('f-name'); if (n){ n.focus(); n.select(); } focusName = false; }
+}
+
+/* ------------------------------ chrome --------------------------------- */
+
+const ADD_PILLS  = ['aParents','aBrother','aSister','aPartner','aSon','aDaughter','aLink'];
+const LINK_PILLS = ['lParent','lSpouse','lChild','lSibling','lBack'];
+
+function placeRing(){
+  const ring = el('ring');
+  const pt = selected && marked.size === 1 && POS[selected];
+  if (!pt || lift || gdrag || linkArm || arrange){ ring.classList.add('hide'); return; }
+  ring.classList.remove('hide');
+  const L = pt.x*view.k + view.x, T = pt.y*view.k + view.y;
+  const put = (id,dx,dy) => { const b = el(id); b.style.left = (L+dx)+'px'; b.style.top = (T+dy)+'px'; };
+
+  put('aParents',0,-68); put('aBrother',-84,-20); put('aSister',-84,20);
+  put('aPartner',84,-20); put('aSon',-48,68); put('aDaughter',48,68); put('aLink',84,20);
+  put('lParent',0,-68); put('lSpouse',84,0); put('lChild',0,68);
+  put('lSibling',-84,0); put('lBack',0,112);
+
+  const on = ringMode === 'add' ? ADD_PILLS : LINK_PILLS;
+  [...ADD_PILLS, ...LINK_PILLS].forEach(id => el(id).classList.toggle('hide', !on.includes(id)));
+  if (ringMode === 'add'){
+    const pu = parentUnion(selected);
+    el('aParents').classList.toggle('hide', !!(pu && pu.partners.filter(Boolean).length));
+  }
+}
+
+const REL_WORD = { spouse:'spouse', parent:'parent', child:'child', sibling:'sibling' };
+
+function armLink(kind){
+  if (!selected) return;
+  if (Object.keys(doc.people).length < 2) return flash('Add someone else first');
+  linkArm = kind;
+  render();
+}
+function cancelLink(){ linkArm = null; ringMode = 'add'; render(); }
+
+function drawBanner(){
+  const b = el('banner');
+  if (!linkArm || !selected){ b.classList.add('hide'); return; }
+  el('bannerText').innerHTML =
+    'Click who is <b>' + esc(nameOf(selected)) + "</b>'s " + REL_WORD[linkArm] +
+    ' <span style="color:#8C9C96">&mdash; nothing gets disconnected</span>';
+  b.classList.remove('hide');
+}
+
+/* Arrange mode: drag anyone sideways to move them within their own set of
+   brothers and sisters. Nothing is connected or disconnected — only the
+   left-to-right order changes, which is what shifts the sibling bars around
+   each other while every bar in a rank stays on one line. */
+function peersOf(id){
+  const u = parentUnion(id);
+  return u ? u.children.map(c => c.id).filter(k => doc.people[k]) : null;
+}
+
+function toggleArrange(){
+  arrange = !arrange;
+  adrag = null;
+  if (arrange){ linkArm = null; ringMode = 'add'; }
+  el('bArrange').classList.toggle('armed', arrange);
+  flash(arrange ? 'Arrange mode — drag along the rank. Couples move together; hold Alt for no snapping.'
+                : 'Arrange mode off');
+  render();
+}
+
+/* Everyone sharing a household: a man and all his wives, or a woman and
+   all the men she married — reached through each other. */
+function householdOf(id){
+  const seen = new Set([id]), stack = [id];
+  while (stack.length){
+    const q = stack.pop();
+    for (const mate of matesOf(q)) if (!seen.has(mate)){ seen.add(mate); stack.push(mate); }
+  }
+  return [...seen];
+}
+
+/* Move somebody to the other side of their household. A plain couple just
+   swaps. Where several people married the same person, the spouses reorder
+   around them and they stay in the middle. */
+function shiftSide(id, dir){
+  const house = householdOf(id);
+  if (house.length < 2) return flash(nameOf(id) + ' has nobody to swap with');
+  const byX = list => list.slice().sort((a,b) => (POS[a]?.x ?? 0) - (POS[b]?.x ?? 0));
+
+  if (house.length === 2){
+    const pair = byX(house);
+    if (pair.indexOf(id) === (dir < 0 ? 0 : 1)) return flash(nameOf(id) + ' is already on that side');
+    commit(() => { doc.people[pair[0]].side = 1; doc.people[pair[1]].side = 0;
+                   pair.forEach(k => { doc.people[k].mx = null; }); });
+    return flash(byX(house).map(nameOf).join('  '));
+  }
+
+  const hub = house.reduce((a,b) => matesOf(b).length > matesOf(a).length ? b : a);
+  if (id === hub) return flash(nameOf(hub) + ' stays in the middle — move a spouse instead');
+  const sp = byX(matesOf(hub));
+  const i = sp.indexOf(id), j = i + dir;
+  if (i < 0) return flash(nameOf(id) + ' and ' + nameOf(hub) + ' are not side by side');
+  if (j < 0 || j >= sp.length) return flash(nameOf(id) + ' is already on that side');
+  sp.splice(j, 0, sp.splice(i,1)[0]);
+  const before = byX(house).join();
+  commit(() => sp.forEach((k,n) => { doc.people[k].side = n; doc.people[k].mx = null; }));
+  // if the rank didn't actually reorder, don't pretend it did
+  flash(byX(house).join() === before
+    ? "The layout couldn't move them — they aren't in one row"
+    : byX(house).map(nameOf).join('  '));
+}
+
+function setLabelSize(n){
+  const v = Math.max(LABEL_MIN, Math.min(LABEL_MAX, Math.round(n*2)/2));
+  if (v === labelSize()) return flash(v === LABEL_MIN ? 'Smallest names' : 'Largest names');
+  commit(() => { doc.fontSize = v; });
+  flash('Names at ' + v);
+}
+
+function freePinned(ids){
+  const pinned = ids.filter(id => doc.people[id]?.mx != null);
+  if (!pinned.length) return flash('Nothing is pinned');
+  commit(() => pinned.forEach(id => { doc.people[id].mx = null; }));
+  flash(pinned.length === 1 ? 'Back to the layout' : pinned.length + ' released');
+}
+
+const matesOf = id => unionsOf(id).map(u => u.partners.find(q => q && q !== id))
+                        .filter(q => q && doc.people[q]);
+
+function beginArrange(id, w){
+  if (!POS[id]) return;
+  history.push(JSON.stringify(doc));
+  // a couple always travels together — a marriage mark cannot stretch
+  const group = !isPlaced(id) ? [id] : [id, ...matesOf(id)];
+  adrag = { id, group, ox:w.x, oy:w.y, from:{}, loose:!isPlaced(id) };
+  group.forEach(g => { if (POS[g]) adrag.from[g] = { x:POS[g].x, y:POS[g].y }; });
+  selected = id; marked = new Set([id]);
+  render();
+}
+
+/* Where a dragged person would like to land. Tried in order, so the most
+   meaningful alignment wins over a merely convenient one:
+     home   back where the layout wanted them — drops the pin entirely
+     align  dead in line with somebody else, any rank
+     under  in line with a couple's descent line
+     even   one standard gap from a neighbour on the same rank
+     grid   a half-gap step, as a last resort                               */
+function snapFor(id, want){
+  const tol = 11 / view.k;
+  const skip = new Set(adrag.group);
+  const nearest = list => {
+    let best = null;
+    for (const c of list){
+      const d = Math.abs(c.x - want);
+      if (d < tol && (!best || d < Math.abs(best.x - want))) best = c;
+    }
+    return best;
+  };
+  const others = Object.keys(POS).filter(q => !skip.has(q) && POS[q]);
+
+  if (AUTO[id] != null && Math.abs(AUTO[id] - want) < tol) return { x:AUTO[id], kind:'home' };
+  const align = nearest(others.map(q => ({ x:POS[q].x, kind:'align' })));
+  if (align) return align;
+  const under = nearest(Object.values(UPOS).map(p => ({ x:p.x, kind:'under' })));
+  if (under) return under;
+
+  const y = POS[id].y;
+  const even = [];
+  others.filter(q => Math.abs(POS[q].y - y) < 1).forEach(q => {
+    const need = Math.max(GAP, ((EXT[q]?.r) ?? GAP/2) + ((EXT[id]?.l) ?? GAP/2));
+    [need, -need, GAP, -GAP, SPOUSE_GAP, -SPOUSE_GAP]
+      .forEach(g => even.push({ x:POS[q].x + g, kind:'even' }));
+  });
+  const hit = nearest(even);
+  if (hit) return hit;
+
+  const step = GAP/2, g = Math.round(want/step)*step;
+  return Math.abs(g - want) < tol ? { x:g, kind:'grid' } : null;
+}
+
+function moveArrange(w, free){
+  const { id, group, from, loose } = adrag;
+  const dx = w.x - adrag.ox, dy = w.y - adrag.oy;
+  adrag.snap = null;
+
+  if (loose){                                 // unattached people move anywhere
+    let fx = from[id].x + dx, fy = from[id].y + dy;
+    if (!free){
+      const row = Math.round(fy / ROW_H);
+      if (Math.abs(fy - row*ROW_H) < 46 / view.k){ fy = row*ROW_H; adrag.snapRow = row; }
+      else adrag.snapRow = null;
+      adrag.group = [id];
+      const hit = snapFor(id, fx);
+      if (hit && hit.kind !== 'home'){ fx = hit.x; adrag.snap = hit; }
+    }
+    doc.people[id].fx = fx; doc.people[id].fy = fy;
+    drawCanvas(); return;
+  }
+
+  let want = from[id].x + dx;
+  if (!free){
+    const hit = snapFor(id, want);
+    if (hit){ want = hit.x; adrag.snap = hit; }
+  }
+  const shift = want - from[id].x;
+  const home = adrag.snap && adrag.snap.kind === 'home';
+  for (const g of group){
+    if (!from[g] || !doc.people[g]) continue;
+    doc.people[g].mx = home ? null : from[g].x + shift;
+  }
+  drawCanvas();
+}
+
+const SNAP_WORD = { home:'back to the layout', align:'lined up', under:'under the descent line',
+                    even:'even spacing', grid:'on the grid' };
+function endArrange(){
+  const note = adrag && adrag.snap ? SNAP_WORD[adrag.snap.kind] : null;
+  adrag = null; save(); render();
+  if (note) flash(note);
+}
+
+function drawMultibar(){
+  const b = el('multibar');
+  if (marked.size < 2 || lift || gdrag){ b.classList.add('hide'); return; }
+  const loose = [...marked].filter(id => !isPlaced(id)).length;
+  b.innerHTML = '<b>'+marked.size+' selected</b>' +
+    '<span>'+(loose ? 'hold any of them to move' : 'all are placed by the diagram')+'</span>' +
+    swatchRow(sharedColor([...marked]), true) +
+    '<button data-multi="unpin">Unpin</button>' +
+    '<button data-multi="detach">Detach</button>' +
+    '<button data-multi="clear">Clear</button>' +
+    '<button data-multi="del" class="danger">Delete</button>';
+  b.querySelectorAll('[data-color]').forEach(x =>
+    x.addEventListener('click', () => applyColor(x.dataset.color)));
+  b.querySelectorAll('[data-multi]').forEach(x => x.addEventListener('click', () => {
+    const a = x.dataset.multi;
+    if (a === 'clear') return select(null);
+    if (a === 'unpin') return freePinned([...marked]);
+    if (a === 'detach'){
+      const ids = [...marked].filter(isPlaced);
+      if (!ids.length) return flash('None of them are attached');
+      commit(() => ids.forEach(cutFree));
+      return flash(ids.length + ' cut free');
+    }
+    if (a === 'del'){
+      const n = marked.size;
+      if (!confirm('Delete ' + n + ' people?')) return;
+      const ids = [...marked];
+      commit(() => ids.forEach(id => { cutFree(id); delete doc.people[id]; }));
+      select(null); flash(n + ' deleted');
+    }
+  }));
+  b.classList.remove('hide');
+}
+
+function render(){
+  drawCanvas(); placeRing(); drawPanel(); drawWheel(); drawMultibar(); drawBanner(); buildKey();
+  const n = Object.keys(doc.people).length;
+  el('count').textContent = n + (n === 1 ? ' person' : ' people');
+  el('hint').classList.toggle('hide', n === 0 || marked.size > 0 || !!lift);
+  el('bUndo').disabled = history.length === 0;
+  // the arrangement couldn't untangle everything — say so rather than
+  // quietly leaving crossed lines on the chart
+  const left = SOLVED.score || 0;
+  el('bCross').classList.toggle('hide', left === 0);
+  if (left) el('bCross').textContent = left + (left === 1 ? ' line crosses' : ' lines cross');
+  svg.classList.toggle('lifting', !!lift);
+  svg.classList.toggle('linking', !!linkArm);
+  svg.classList.toggle('arranging', arrange);
+}
+
+let toastTimer;
+function flash(msg){
+  const t = el('toast');
+  t.textContent = msg; t.classList.remove('hide');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.add('hide'), 2000);
+}
+function select(id){
+  marked = id ? new Set([id]) : new Set();
+  selected = id;
+  ringMode = 'add'; linkArm = null;
+  render();
+}
+function setMarked(ids){
+  marked = new Set(ids.filter(i => doc.people[i]));
+  selected = marked.size === 1 ? [...marked][0] : null;
+  ringMode = 'add'; linkArm = null;
+  render();
+}
+function toggleMark(id){
+  if (marked.has(id)) marked.delete(id); else marked.add(id);
+  selected = marked.size === 1 ? [...marked][0] : null;
+  render();
+}
+const screenOf = id => POS[id] && { x:POS[id].x*view.k + view.x, y:POS[id].y*view.k + view.y };
+
+/* --------------------------- adding people ------------------------------ */
+
+function openAdder(){
+  closeTitle();                       // they share the same corner
+  el('adder').classList.remove('hide');
+  const n = el('addName'); n.value = ''; n.focus();
+}
+function closeAdder(){ el('adder').classList.add('hide'); }
+
+/* Where a new person lands. Start from the middle of whatever canvas is
+   actually visible — not the top-left corner, which sits underneath the
+   add-people panel, so you could not tell whether anything had happened. */
+function freeSpot(){
+  const r = svg.getBoundingClientRect();
+  const panelW = el('panel').classList.contains('hide') ? 0 : 300;
+  let left = 70;
+  if (!el('adder').classList.contains('hide')){
+    const a = el('adder').getBoundingClientRect();
+    if (a.width) left = Math.max(left, a.right - r.left + 44);
+  }
+  let right = r.width - panelW - 70;
+  if (right - left < 150){ left = 70; right = Math.max(left + 150, r.width - 70); }
+  const top = 80, bottom = Math.max(top + 120, r.height - 80);
+  const cx = (left + right)/2, cy = (top + bottom)/2;
+  const toW = (sx,sy) => ({ x:(sx - view.x)/view.k, y:(sy - view.y)/view.k });
+
+  const taken = Object.values(POS);
+  if (!taken.length) return toW(cx, cy);                    // first person: dead centre
+  const clear = (x,y) => taken.every(p => Math.abs(p.x-x) > 112 || Math.abs(p.y-y) > 104);
+
+  const spots = [];
+  for (let sy = top; sy <= bottom; sy += 116)
+    for (let sx = left; sx <= right; sx += 132) spots.push([sx,sy]);
+  spots.sort((a,b) => Math.hypot(a[0]-cx, a[1]-cy) - Math.hypot(b[0]-cx, b[1]-cy));
+  for (const [sx,sy] of spots){
+    const w = toW(sx,sy);
+    if (clear(w.x,w.y)) return w;                           // nearest free spot to the middle
+  }
+  return { x:0, y:Math.max(...taken.map(p => p.y)) + ROW_H };
+}
+
+function addLoose(gender, name){
+  const spot = freeSpot();
+  const p = newPerson(gender, { name:name || '', fx:spot.x, fy:spot.y,
+                                ego:Object.keys(doc.people).length === 0 });
+  commit(() => { doc.people[p.id] = p; });
+  return p.id;
+}
+
+function tidyLoose(){
+  const loose = Object.keys(doc.people).filter(id => !isPlaced(id));
+  if (!loose.length) return flash('Everyone is connected');
+  const placed = Object.keys(POS).filter(isPlaced).map(id => POS[id]);
+  const top = placed.length ? Math.max(...placed.map(p => p.y)) + ROW_H : 0;
+  const perRow = Math.max(4, Math.ceil(Math.sqrt(loose.length)));
+  commit(() => {
+    loose.forEach((id,i) => {
+      doc.people[id].fx = (i % perRow - (perRow-1)/2) * 132;
+      doc.people[id].fy = top + Math.floor(i / perRow) * 116;
+    });
+  });
+  flash(loose.length + ' lined up');
+}
+
+/* --------------------------- relationships ------------------------------ */
+
+/* Rank 0 is Ego's generation, so marking somebody Ego renumbers every rank
+   and the whole chart slides up or down. Pin a person's spot on screen
+   across the change and shift the view by the same amount, so the drawing
+   stays exactly where it was and only the G labels change. */
+function keepStill(change){
+  const anchor = (selected && POS[selected]) ? selected
+               : Object.keys(POS).find(id => isPlaced(id) && POS[id]);
+  const was = anchor ? { x:POS[anchor].x, y:POS[anchor].y } : null;
+  change();
+  if (was && POS[anchor]){
+    view.x += (was.x - POS[anchor].x) * view.k;
+    view.y += (was.y - POS[anchor].y) * view.k;
+    drawCanvas(); placeRing(); drawWheel();
+  }
+}
+
+/* Renumbering the ranks moves every placed person, but loose people sit at
+   absolute coordinates and would be left behind — which is how they ended up
+   on a different rank, sometimes on top of somebody. Move them by the same
+   amount so the whole picture stays together. */
+function applyEgo(ids, value){
+  keepStill(() => commit(() => {
+    const before = egoBase();
+    ids.forEach(id => { if (doc.people[id]) doc.people[id].ego = value; });
+    const shift = (before - egoBase()) * ROW_H;
+    if (shift) Object.keys(doc.people)
+      .filter(id => !isPlaced(id))
+      .forEach(id => { doc.people[id].fy += shift; });
+  }));
+}
+
+function setEgo(id){ applyEgo([id], !doc.people[id].ego); }
+
+/* Outline colour applies to the whole selection, so you can box a lineage
+   and mark it in one go. */
+function applyColor(hex){
+  const ids = [...marked];
+  if (!ids.length) return flash('Nobody is selected');
+  commit(() => ids.forEach(id => { doc.people[id].color = hex === INK ? null : hex; }));
+}
+const colorLabel = hex => (doc.colorNames || {})[hex] || '';
+
+/* Only colours somebody on the chart is actually wearing — an untouched
+   palette entry has nothing to name yet, and would just be clutter. */
+function colorsInUse(){
+  // an untouched person still wears Ink -- colorOf resolves that default,
+  // whereas reading p.color directly would miss them entirely
+  const used = new Set(Object.values(doc.people).map(colorOf));
+  return COLORS.filter(([hex]) => used.has(hex));
+}
+
+function buildKey(){
+  const wrap = el('colorLegend');
+  const inUse = colorsInUse();
+  if (!inUse.length){
+    wrap.classList.add('empty');
+    wrap.querySelector('#colorKey').innerHTML = '';
+    return;
+  }
+  wrap.classList.remove('empty');
+  const list = wrap.querySelector('#colorKey');
+  list.innerHTML = inUse.map(([hex,fallback]) =>
+    '<div class="keyitem">' +
+      '<i style="background:'+hex+'"></i>' +
+      '<input class="keyname" data-hex="'+hex+'" value="'+esc(colorLabel(hex))+
+      '" placeholder="'+fallback+'">' +
+    '</div>').join('');
+  list.querySelectorAll('[data-hex]').forEach(inp =>
+    inp.addEventListener('input', () => {
+      doc.colorNames = doc.colorNames || {};
+      if (inp.value.trim()) doc.colorNames[inp.dataset.hex] = inp.value;
+      else delete doc.colorNames[inp.dataset.hex];
+      save();
+    }));
+}
+
+const sharedColor = ids => {
+  const set = new Set(ids.map(id => colorOf(doc.people[id])));
+  return set.size === 1 ? [...set][0] : null;
+};
+
+/* Ego can be more than one person — mark a whole selection at once */
+function toggleEgoMarked(){
+  const ids = [...marked];
+  if (!ids.length) return flash('Nobody is selected');
+  const allEgo = ids.every(id => doc.people[id].ego);
+  applyEgo(ids, !allEgo);
+  flash(allEgo ? 'Ego cleared'
+      : ids.length === 1 ? 'Marked as Ego' : ids.length + ' marked as Ego');
+}
+
+function cutFree(id){                 // remove from every union, tidy up the leftovers
+  if (doc.people[id]) doc.people[id].mx = null;
+  for (const u of Object.values(doc.unions)){
+    u.partners = u.partners.map(q => q === id ? null : q);
+    u.children = u.children.filter(c => c.id !== id);
+    // a bar with no parents and fewer than two children means nothing
+    if (!u.partners.filter(Boolean).length && u.children.length < 2) delete doc.unions[u.id];
+  }
+}
+
+function isAncestor(a, b){
+  const seen = new Set();
+  const walk = id => {
+    if (id === a) return true;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    const u = parentUnion(id);
+    return u ? u.partners.filter(Boolean).some(walk) : false;
+  };
+  const u = parentUnion(b);
+  return u ? u.partners.filter(Boolean).some(walk) : false;
+}
+
+/* a becomes b's <kind> */
+function relate(a, b, kind){
+  if (a === b) return flash('Pick two different people');
+
+  if (kind === 'spouse'){
+    if (unionsOf(a).some(u => u.partners.includes(b))) return flash('Already a couple');
+    commit(() => { const u = newUnion(a,b); doc.unions[u.id] = u; });
+    return flash(nameOf(a)+' and '+nameOf(b)+' are now a couple');
+  }
+  if (kind === 'sibling'){
+    if (isAncestor(a,b) || isAncestor(b,a)) return flash('Those two are in different generations');
+    const ua = parentUnion(a), ub = parentUnion(b);
+    if (ua && ub && ua.id === ub.id) return flash('Already siblings');
+    if (ua && ua.partners.filter(Boolean).length)
+      return flash(nameOf(a) + ' already has parents — link them as a child of ' +
+                   nameOf(b) + "'s parents instead");
+    commit(() => {
+      let u = parentUnion(b);
+      if (!u){ u = newUnion(null,null); u.children.push({ id:b, link:'bio', twin:false }); doc.unions[u.id] = u; }
+      u.children.push({ id:a, link:'bio', twin:false });
+    });
+    return flash(nameOf(a)+' and '+nameOf(b)+' are now siblings');
+  }
+  const par = kind === 'parent' ? a : b;
+  const kid = kind === 'parent' ? b : a;
+  if (isAncestor(kid, par)) return flash('That would make someone their own ancestor');
+  const u = parentUnion(kid);
+  if (u && u.partners.includes(par)) return flash('Already recorded');
+  commit(() => {
+    if (u && u.partners.filter(Boolean).length < 2){
+      const i = u.partners.findIndex(s => !s);        // fill the empty parent slot
+      u.partners[i >= 0 ? i : 0] = par;
+      return;
+    }
+    if (!u){
+      // hang them off a family this parent already has, rather than
+      // stranding them under a lone parent
+      const home = unionsOf(par).find(x => x.partners.filter(Boolean).length === 2)
+                || unionsOf(par)[0];
+      if (home){ home.children.push({ id:kid, link:'bio', twin:false }); return; }
+    }
+    const nu = newUnion(par, null);                   // otherwise a fresh set of parents
+    nu.children.push({ id:kid, link:'bio', twin:false });
+    doc.unions[nu.id] = nu;
+  });
+  flash(nameOf(par)+' is now a parent of '+nameOf(kid));
+}
+
+/* quick-add: these make a brand new person and attach them at once */
+function addPartner(){
+  const p = doc.people[selected]; if (!p) return;
+  const mate = newPerson(p.gender === 'm' ? 'f' : 'm');
+  commit(() => { doc.people[mate.id] = mate; const u = newUnion(p.id, mate.id); doc.unions[u.id] = u; });
+  focusName = true; select(mate.id);
+}
+function addParents(){
+  const p = doc.people[selected]; if (!p) return;
+  const ex = parentUnion(p.id);
+  if (ex && ex.partners.filter(Boolean).length) return flash('Already has parents');
+  const dad = newPerson('m'), mum = newPerson('f');
+  commit(() => {
+    doc.people[dad.id] = dad; doc.people[mum.id] = mum;
+    if (ex) ex.partners = [dad.id, mum.id];
+    else { const u = newUnion(dad.id, mum.id);
+           u.children.push({ id:p.id, link:'bio', twin:false }); doc.unions[u.id] = u; }
+  });
+  focusName = true; select(dad.id);
+}
+function addSibling(gender){
+  const p = doc.people[selected]; if (!p) return;
+  const sib = newPerson(gender);
+  commit(() => {
+    let u = parentUnion(p.id);
+    if (!u){ u = newUnion(null,null); u.children.push({ id:p.id, link:'bio', twin:false }); doc.unions[u.id] = u; }
+    doc.people[sib.id] = sib;
+    u.children.push({ id:sib.id, link:'bio', twin:false });
+  });
+  focusName = true; select(sib.id);
+}
+function addChild(gender){
+  const p = doc.people[selected]; if (!p) return;
+  const kid = newPerson(gender);
+  commit(() => {
+    let u = unionsOf(p.id)[0];
+    if (!u){ const mate = newPerson(p.gender === 'm' ? 'f' : 'm');
+             doc.people[mate.id] = mate; u = newUnion(p.id, mate.id); doc.unions[u.id] = u; }
+    doc.people[kid.id] = kid;
+    u.children.push({ id:kid.id, link:'bio', twin:false });
+  });
+  focusName = true; select(kid.id);
+}
+function removeSelected(){
+  const id = selected; if (!doc.people[id]) return;
+  commit(() => { cutFree(id); delete doc.people[id]; });
+  select(null);
+}
+
+/* --------------------- picking someone up ------------------------------- */
+
+const SLOTS = {
+  m: [['parent','Father',0,-1], ['spouse','Husband',1,0], ['child','Son',0,1], ['sibling','Brother',-1,0]],
+  f: [['parent','Mother',0,-1], ['spouse','Wife',1,0], ['child','Daughter',0,1], ['sibling','Sister',-1,0]],
+  u: [['parent','Parent',0,-1], ['spouse','Spouse',1,0], ['child','Child',0,1], ['sibling','Sibling',-1,0]]
+};
+
+/* Shoving a whole selection around. Only the loose ones can actually move —
+   anyone attached is positioned by the diagram, so they stay put. */
+function beginGroupDrag(w){
+  const ids = [...marked].filter(id => !isPlaced(id) && doc.people[id]);
+  if (!ids.length){ flash('Those are all placed by the diagram'); return; }
+  history.push(JSON.stringify(doc));
+  gdrag = { ids, ox:w.x, oy:w.y, from:{} };
+  ids.forEach(id => { gdrag.from[id] = { x:doc.people[id].fx, y:doc.people[id].fy }; });
+  press = null; pan = null;
+  render();
+}
+function moveGroupDrag(w){
+  for (const id of gdrag.ids){
+    doc.people[id].fx = gdrag.from[id].x + (w.x - gdrag.ox);
+    doc.people[id].fy = gdrag.from[id].y + (w.y - gdrag.oy);
+  }
+  drawCanvas();
+}
+function endGroupDrag(){ gdrag = null; save(); render(); }
+
+function beginLift(id, w){
+  const p = doc.people[id]; if (!p) return;
+  history.push(JSON.stringify(doc));
+  const at = POS[id] || { x:w.x, y:w.y };
+  if (isPlaced(id)) cutFree(id);                 // picking someone up cuts them free
+  p.fx = at.x; p.fy = at.y;
+  lift = { id, dx:w.x - at.x, dy:w.y - at.y, target:null, slot:null };
+  press = null; pan = null;
+  selected = id;
+  save(); render();
+}
+
+/* While carrying someone, the CURSOR does the aiming, not the carried
+   symbol. Come within reach of a person and the drag locks onto them: the
+   carried figure is held inside a zone and snaps to whichever slot the
+   cursor points at, so reaching for "Wife" can't wander onto the neighbour.
+   Pull the cursor clear of the zone and the lock breaks — the figure jumps
+   back under the cursor and is free again. */
+function moveLift(e){
+  const r = svg.getBoundingClientRect();
+  const cur = { x:e.clientX - r.left, y:e.clientY - r.top };
+  const screenOf = id => ({ x:POS[id].x*view.k + view.x, y:POS[id].y*view.k + view.y });
+  const toWorldPt = pt => ({ x:(pt.x - view.x)/view.k, y:(pt.y - view.y)/view.k });
+  const p = doc.people[lift.id];
+
+  // hold the current target until the cursor genuinely leaves its zone
+  if (lift.target && POS[lift.target]){
+    const t = screenOf(lift.target);
+    if (Math.hypot(cur.x-t.x, cur.y-t.y) > RELEASE_R) lift.target = null;
+  } else lift.target = null;
+
+  // free to look for someone new
+  if (!lift.target){
+    let best = null, bd = Infinity;
+    for (const id of Object.keys(doc.people)){
+      if (id === lift.id || !POS[id]) continue;
+      const t = screenOf(id);
+      const d = Math.hypot(cur.x-t.x, cur.y-t.y);
+      if (d < bd){ bd = d; best = id; }
+    }
+    if (best && bd < enterR()) lift.target = best;
+  }
+
+  lift.slot = null;
+  let at = cur, offset = true;
+
+  if (lift.target){
+    const t = screenOf(lift.target);
+    for (const [kind,,ux,uy] of SLOTS[p.gender] || SLOTS.u){
+      const sx = t.x + ux*SLOT_R, sy = t.y + uy*SLOT_R;
+      if (Math.hypot(cur.x-sx, cur.y-sy) < SLOT_HIT){
+        lift.slot = kind; at = { x:sx, y:sy }; offset = false; break;
+      }
+    }
+    if (!lift.slot){                       // penned in, so the drag can't stray
+      const dx = cur.x-t.x, dy = cur.y-t.y, d = Math.hypot(dx,dy) || 1;
+      const cap = RELEASE_R * 0.9;
+      if (d > cap){ at = { x:t.x + dx/d*cap, y:t.y + dy/d*cap }; offset = false; }
+    }
+  }
+
+  const w = toWorldPt(at);
+  p.fx = w.x - (offset ? lift.dx : 0);
+  p.fy = w.y - (offset ? lift.dy : 0);
+
+  // when nobody is being targeted, line them up on the nearest rank rule
+  lift.snapRow = null;
+  if (!lift.target){
+    const row = Math.round(p.fy / ROW_H);
+    if (Math.abs(p.fy - row*ROW_H) < SNAP_Y / view.k){
+      p.fy = row * ROW_H;
+      lift.snapRow = row;
+    }
+  }
+  drawCanvas(); drawWheel();
+}
+
+function endLift(){
+  const { id, target, slot } = lift;
+  lift = null;
+  if (target && slot) relate(id, target, slot);
+  else { save(); render(); }
+  drawWheel();
+}
+
+function drawWheel(){
+  const w = el('wheel');
+  if (!lift || !lift.target || !POS[lift.target]){ w.classList.add('hide'); w.innerHTML = ''; return; }
+  const t = POS[lift.target];
+  const cx = t.x*view.k + view.x, cy = t.y*view.k + view.y;
+  const gender = doc.people[lift.id].gender;
+  w.innerHTML =
+    '<div class="zone" style="left:'+cx+'px;top:'+cy+'px;width:'+(RELEASE_R*2)+
+    'px;height:'+(RELEASE_R*2)+'px"></div>' +
+    (SLOTS[gender] || SLOTS.u).map(([kind,label,ux,uy]) =>
+      '<div class="slot'+(lift.slot === kind ? ' on' : '')+'" style="left:'+(cx+ux*SLOT_R)+
+      'px;top:'+(cy+uy*SLOT_R)+'px">'+label+'</div>').join('');
+  w.classList.remove('hide');
+}
+
+/* ------------------------------- view ---------------------------------- */
+
+function zoomTo(k,cx,cy){
+  const r = svg.getBoundingClientRect();
+  const mx = cx ?? r.width/2, my = cy ?? r.height/2;
+  k = Math.min(2.6, Math.max(0.2, k));
+  view = { k, x: mx - ((mx-view.x)/view.k)*k, y: my - ((my-view.y)/view.k)*k };
+  drawCanvas(); placeRing(); drawWheel();
+}
+function fit(){
+  const r = svg.getBoundingClientRect();
+  const pts = Object.values(POS);
+  if (!pts.length){ view = { x:r.width/2, y:r.height/2, k:1 }; drawCanvas(); placeRing(); return; }
+  const pad = 120;
+  const xs = pts.map(p=>p.x), ys = pts.map(p=>p.y);
+  const minX = Math.min(...xs)-pad, maxX = Math.max(...xs)+pad;
+  const minY = Math.min(...ys)-pad, maxY = Math.max(...ys)+pad;
+  const k = Math.min(r.width/(maxX-minX), r.height/(maxY-minY), 1.3);
+  view = { k, x:r.width/2 - ((minX+maxX)/2)*k, y:r.height/2 - ((minY+maxY)/2)*k };
+  drawCanvas(); placeRing();
+}
+function toWorld(e){
+  const r = svg.getBoundingClientRect();
+  return { x:(e.clientX-r.left-view.x)/view.k, y:(e.clientY-r.top-view.y)/view.k };
+}
+
+/* ------------------------------ pointer -------------------------------- */
+
+/* Middle-drag (or Space-drag, or one finger on a touch screen) moves the
+   canvas. Left button belongs to the people: a tap selects, a press and
+   hold picks someone up. */
+svg.addEventListener('mousedown', e => { if (e.button === 1) e.preventDefault(); });
+
+svg.addEventListener('pointerdown', e => {
+  svg.setPointerCapture(e.pointerId);
+  const node  = e.target.closest('[data-pid]');
+  const touch = e.pointerType !== 'mouse';
+  emptyPress  = false;
+
+  // the title is a control, not canvas — a tap on it must not start a pan
+  if (e.button === 0 && !lift && e.target.closest('[data-title]')){ openTitle(); return; }
+
+  if (e.button === 1 || spaceDown || (touch && !node && !lift)){
+    e.preventDefault();
+    const r = svg.getBoundingClientRect();
+    pan = { sx:e.clientX-r.left-view.x, sy:e.clientY-r.top-view.y, moved:false };
+    svg.classList.add('panning');
+    return;
+  }
+  if (e.button !== 0 || lift) return;
+
+  closeTitle();
+
+  if (linkArm){                       // second half of a click-to-link
+    if (node){
+      const id = node.dataset.pid, kind = linkArm, from = selected;
+      linkArm = null; ringMode = 'add';
+      if (id === from){ flash('Pick a different person'); render(); }
+      else relate(id, from, kind);
+    } else cancelLink();
+    return;
+  }
+
+  if (arrange){
+    if (node) beginArrange(node.dataset.pid, toWorld(e));
+    else { emptyPress = true; }
+    return;
+  }
+
+  if (node){
+    const id = node.dataset.pid, w = toWorld(e);
+    const group = marked.size > 1 && marked.has(id);
+    press = { id, w, shift:e.shiftKey,
+              timer:setTimeout(() => {
+                press = null;
+                group ? beginGroupDrag(w) : beginLift(id, w);
+              }, HOLD_MS) };
+  } else {
+    emptyPress = true;
+    const r2 = svg.getBoundingClientRect();
+    box = { x0:e.clientX-r2.left, y0:e.clientY-r2.top, x1:e.clientX-r2.left, y1:e.clientY-r2.top,
+            moved:false, add:e.shiftKey };
+  }
+});
+
+svg.addEventListener('pointermove', e => {
+  if (adrag) return moveArrange(toWorld(e), e.altKey);
+  if (gdrag) return moveGroupDrag(toWorld(e));
+  if (lift) return moveLift(e);
+  if (box){
+    const r = svg.getBoundingClientRect();
+    box.x1 = e.clientX-r.left; box.y1 = e.clientY-r.top;
+    if (Math.abs(box.x1-box.x0) > 4 || Math.abs(box.y1-box.y0) > 4) box.moved = true;
+    drawMarquee();
+    return;
+  }
+  if (pan){
+    const r = svg.getBoundingClientRect();
+    view.x = e.clientX-r.left-pan.sx; view.y = e.clientY-r.top-pan.sy;
+    pan.moved = true;
+    drawCanvas(); placeRing();
+  }
+});
+
+function finishPointer(){
+  if (adrag) endArrange();
+  else if (gdrag) endGroupDrag();
+  else if (lift) endLift();
+  else if (press){
+    clearTimeout(press.timer);
+    press.shift ? toggleMark(press.id) : select(press.id);
+  }
+  else if (box && box.moved) applyMarquee();
+  else if ((emptyPress || (pan && !pan.moved)) && marked.size) select(null);
+  press = null; pan = null; emptyPress = false; box = null;
+  el('marquee').classList.add('hide');
+  svg.classList.remove('panning');
+}
+
+function drawMarquee(){
+  const m = el('marquee');
+  if (!box || !box.moved){ m.classList.add('hide'); return; }
+  m.style.left = Math.min(box.x0,box.x1)+'px';
+  m.style.top = Math.min(box.y0,box.y1)+'px';
+  m.style.width = Math.abs(box.x1-box.x0)+'px';
+  m.style.height = Math.abs(box.y1-box.y0)+'px';
+  m.classList.remove('hide');
+}
+
+function applyMarquee(){
+  const x1 = Math.min(box.x0,box.x1), x2 = Math.max(box.x0,box.x1);
+  const y1 = Math.min(box.y0,box.y1), y2 = Math.max(box.y0,box.y1);
+  const hit = Object.keys(doc.people).filter(id => {
+    const s = screenOf(id);
+    return s && s.x >= x1 && s.x <= x2 && s.y >= y1 && s.y <= y2;
+  });
+  setMarked(box.add ? [...marked, ...hit] : hit);
+  if (hit.length) flash(hit.length + (hit.length === 1 ? ' selected' : ' selected'));
+}
+svg.addEventListener('pointerup', finishPointer);
+svg.addEventListener('pointercancel', finishPointer);
+
+svg.addEventListener('wheel', e => {
+  e.preventDefault();
+  const r = svg.getBoundingClientRect();
+  zoomTo(view.k*(e.deltaY < 0 ? 1.12 : 0.89), e.clientX-r.left, e.clientY-r.top);
+}, { passive:false });
+svg.addEventListener('contextmenu', e => e.preventDefault());
+
+/* ------------------------------ keyboard -------------------------------- */
+
+/* nudge the selected person one place along their own sibling set */
+function shuffle(dir){
+  const peers = peersOf(selected);
+  if (!peers || peers.length < 2) return flash('No brothers or sisters to move among');
+  const order = peers.slice().sort((a,b) => (POS[a]?.x ?? 0) - (POS[b]?.x ?? 0));
+  const i = order.indexOf(selected), j = i + dir;
+  if (j < 0 || j >= order.length) return;
+  order.splice(j, 0, order.splice(i,1)[0]);
+  commit(() => order.forEach((k,n) => { doc.people[k].ord = n; doc.people[k].mx = null; }));
+}
+
+function stepTo(dir){
+  if (!selected) return;
+  if (dir === 'up'){
+    const par = parentUnion(selected)?.partners.filter(Boolean)[0];
+    return par ? select(par) : flash('No parents recorded');
+  }
+  if (dir === 'down'){
+    const kid = unionsOf(selected).flatMap(u => u.children)[0];
+    return kid ? select(kid.id) : flash('No children recorded');
+  }
+  const y = POS[selected]?.y;
+  const row = Object.keys(POS).filter(id => Math.abs(POS[id].y - y) < 1)
+                .sort((a,b) => POS[a].x - POS[b].x);
+  const nxt = row[row.indexOf(selected) + (dir === 'right' ? 1 : -1)];
+  if (nxt) select(nxt);
+}
+
+window.addEventListener('keyup', e => {
+  if (e.code === 'Space'){ spaceDown = false; svg.classList.remove('panready'); }
+});
+
+window.addEventListener('keydown', e => {
+  if (captureKey(e)) return;
+  if (!el('settings').classList.contains('hide')){
+    if (e.key === 'Escape') closeSettings();
+    return;                                   // the sheet swallows the rest
+  }
+  if (!el('slotsSheet').classList.contains('hide')){
+    if (e.key === 'Escape') closeSlots();
+    return;
+  }
+  const tag = e.target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'){
+    if (e.key === 'Escape') e.target.blur();
+    return;
+  }
+  if (e.code === 'Space'){        // hold Space to drag the canvas with the left button
+    e.preventDefault();
+    if (!spaceDown){ spaceDown = true; svg.classList.add('panready'); }
+    return;
+  }
+  const k = e.key.toLowerCase();
+  if ((e.metaKey || e.ctrlKey) && k === 'z'){ e.preventDefault(); return undo(); }
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (k === 'escape'){
+    if (clearArmed) return disarmClear();
+    if (linkArm || ringMode === 'link') return cancelLink();
+    closeAdder(); select(null); return;
+  }
+  if (k === 'arrowup'){ e.preventDefault(); return stepTo('up'); }
+  if (k === 'arrowdown'){ e.preventDefault(); return stepTo('down'); }
+  if (k === 'arrowleft' || k === 'arrowright'){
+    e.preventDefault();
+    const dir = k === 'arrowright' ? 1 : -1;
+    if (arrange && selected) return e.shiftKey ? shiftSide(selected, dir) : shuffle(dir);
+    return stepTo(dir === 1 ? 'right' : 'left');
+  }
+  if (k === 'enter' && selected){ e.preventDefault(); const n = el('f-name'); if (n){ n.focus(); n.select(); } return; }
+  if (k === '+' || k === '='){ e.preventDefault(); return zoomTo(view.k*1.15); }
+  if (k === '-' || k === '_'){ e.preventDefault(); return zoomTo(view.k*0.87); }
+
+  const acts = {
+    add:openAdder, newMan:() => select(addLoose('m')), newWoman:() => select(addLoose('f')),
+    link:() => { if (selected && marked.size === 1){ ringMode = 'link'; render(); } },
+    arrange:toggleArrange,
+    unpin:() => freePinned(marked.size ? [...marked] : Object.keys(doc.people)),
+    parents:addParents, spouse:addPartner,
+    brother:() => addSibling('m'), sister:() => addSibling('f'),
+    son:() => addChild('m'), daughter:() => addChild('f'),
+    detach:() => {
+      const ids = [...marked].filter(isPlaced);
+      if (!ids.length) return flash('Nothing attached is selected');
+      commit(() => ids.forEach(cutFree));
+      flash(ids.length === 1 ? 'Cut free' : ids.length + ' cut free');
+    },
+    ego:toggleEgoMarked,
+    tidy:() => { if (!e.shiftKey) tidyLoose(); }, fit:fit,
+    smaller:() => setLabelSize(labelSize() - 1),
+    bigger:() => setLabelSize(labelSize() + 1),
+    help:() => el('keys').classList.toggle('hide')
+  };
+  const action = actionForKey(k);
+  if (action && acts[action]){ e.preventDefault(); return acts[action](); }
+  if (k === 'a' && e.shiftKey){ e.preventDefault(); return setMarked(Object.keys(doc.people)); }
+  if ((k === 'backspace' || k === 'delete') && marked.size){
+    e.preventDefault();
+    if (marked.size === 1) return removeSelected();
+    const n = marked.size, ids = [...marked];
+    if (!confirm('Delete ' + n + ' people?')) return;
+    commit(() => ids.forEach(id => { cutFree(id); delete doc.people[id]; }));
+    select(null); flash(n + ' deleted');
+  }
+});
+
+/* --------------------------- chrome wiring ------------------------------ */
+
+el('bAdd').onclick    = openAdder;
+el('addClose').onclick = closeAdder;
+/* Starting over throws away the whole chart, so it takes two presses: the
+   first arms the button, the second does it. Anything else stands it down. */
+let clearArmed = null;
+function disarmClear(){
+  clearTimeout(clearArmed); clearArmed = null;
+  el('bClear').textContent = 'Start over';
+  el('bClear').classList.remove('hot');
+  el('bClearNo').classList.add('hide');
+}
+el('bClear').onclick = e => {
+  e.stopPropagation();
+  if (!Object.keys(doc.people).length) return flash('Nothing to clear');
+  if (!clearArmed){
+    el('bClear').textContent = 'Yes — clear everything';
+    el('bClear').classList.add('hot');
+    el('bClearNo').classList.remove('hide');
+    clearArmed = setTimeout(disarmClear, 6000);
+    return flash('Press again to clear the whole chart, or Cancel');
+  }
+  const n = Object.keys(doc.people).length, keep = labelSize();
+  disarmClear();
+  commit(() => { doc = { people:{}, unions:{}, fontSize:keep }; });
+  select(null);
+  flash(n + ' people cleared — Undo brings them back');
+};
+el('bClearNo').onclick = e => { e.stopPropagation(); disarmClear(); flash('Left alone'); };
+
+el('titleText').addEventListener('input', () => {
+  doc.title = el('titleText').value;
+  save(); drawCanvas(); placeRing();
+});
+el('titleText').addEventListener('keydown', e => {
+  e.stopPropagation();
+  if (e.key === 'Enter' || e.key === 'Escape'){ e.preventDefault(); closeTitle(); }
+});
+el('titleUp').onclick   = () => setTitleSize(titleSize() + 2);
+el('titleDown').onclick = () => setTitleSize(titleSize() - 2);
+el('titleDel').onclick  = () => { commit(() => { doc.title = ''; }); closeTitle(); flash('Title removed'); };
+
+el('bSlots').onclick   = openSlots;
+el('slotsClose').onclick = closeSlots;
+el('slotsSheet').addEventListener('click', e => { if (e.target.id === 'slotsSheet') closeSlots(); });
+el('bSettings').onclick = openSettings;
+el('setClose').onclick  = closeSettings;
+el('settings').addEventListener('click', e => { if (e.target.id === 'settings') closeSettings(); });
+el('settings').querySelectorAll('.tab').forEach(t =>
+  t.addEventListener('click', () => { setTab = t.dataset.tab; listening = null; drawSettings(); }));
+
+el('bArrange').onclick = toggleArrange;
+el('bCross').onclick = () => {
+  if (!arrange) toggleArrange();
+  flash('Drag the people on those rows apart to separate the lines');
+};
+el('bTidy').onclick   = tidyLoose;
+el('bFit').onclick    = fit;
+el('bUndo').onclick   = undo;
+el('bKeys').onclick   = () => { el('keys').classList.toggle('hide'); el('legend').classList.add('hide'); };
+el('bLegend').onclick = () => { el('legend').classList.toggle('hide'); el('keys').classList.add('hide'); };
+el('tDown').onclick   = () => setLabelSize(labelSize() - 1);
+el('tUp').onclick     = () => setLabelSize(labelSize() + 1);
+el('zIn').onclick     = () => zoomTo(view.k*1.2);
+el('zOut').onclick    = () => zoomTo(view.k*0.83);
+
+el('adder').querySelectorAll('[data-add-sex]').forEach(b => b.addEventListener('click', () => {
+  addSex = b.dataset.addSex;
+  el('adder').querySelectorAll('[data-add-sex]').forEach(q =>
+    q.setAttribute('aria-pressed', String(q.dataset.addSex === addSex)));
+}));
+function submitAdd(){
+  const n = el('addName');
+  const name = n.value.trim();
+  if (!name) return n.focus();
+  addLoose(addSex, name);
+  n.value = ''; n.focus();
+  flash(name + ' added');
+}
+el('addGo').onclick = submitAdd;
+el('addName').addEventListener('keydown', e => {
+  if (e.key === 'Enter'){ e.preventDefault(); submitAdd(); }
+  if (e.key === 'Escape'){ e.preventDefault(); closeAdder(); }
+});
+
+el('bFile').onclick = e => { e.stopPropagation(); el('fileMenu').classList.toggle('hide'); };
+document.addEventListener('click', e => {
+  if (!e.target.closest('.menu')) el('fileMenu').classList.add('hide');
+  if (clearArmed && e.target.id !== 'bClear' && e.target.id !== 'bClearNo') disarmClear();
+});
+el('fileMenu').querySelectorAll('[data-file]').forEach(b => b.addEventListener('click', () => {
+  el('fileMenu').classList.add('hide');
+  const a = b.dataset.file;
+  if (a === 'save'){
+    const blob = new Blob([JSON.stringify(doc,null,2)], { type:'application/json' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob); link.download = 'kinship.json'; link.click();
+    URL.revokeObjectURL(link.href);
+  }
+  if (a === 'pdf') exportPDF();
+  if (a === 'open') el('fileIn').click();
+}));
+el('fileIn').onchange = ev => {
+  const file = ev.target.files?.[0]; if (!file) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    try {
+      const parsed = JSON.parse(rd.result);
+      if (!parsed?.people) throw new Error('bad');
+      commit(() => { doc = normalise(parsed); });
+      select(null); fit(); flash('Opened ' + file.name);
+    } catch { flash("That file isn't a kinship diagram"); }
+    ev.target.value = '';
+  };
+  rd.readAsText(file);
+};
+
+el('aParents').onclick  = addParents;
+el('aPartner').onclick  = addPartner;
+el('aBrother').onclick  = () => addSibling('m');
+el('aSister').onclick   = () => addSibling('f');
+el('aSon').onclick      = () => addChild('m');
+el('aDaughter').onclick = () => addChild('f');
+el('aLink').onclick     = () => { ringMode = 'link'; render(); };
+el('lBack').onclick     = () => { ringMode = 'add'; render(); };
+el('lSpouse').onclick   = () => armLink('spouse');
+el('lParent').onclick   = () => armLink('parent');
+el('lChild').onclick    = () => armLink('child');
+el('lSibling').onclick  = () => armLink('sibling');
+el('bannerCancel').onclick = cancelLink;
+
+window.addEventListener('resize', () => { drawCanvas(); placeRing(); drawWheel(); });
+
+/* ------------------------------- boot ---------------------------------- */
+
+try {
+  const legacy = store.get('kinship:doc:v4') || store.get('kinship:doc:v3') || store.get('kinship:doc:v2');
+  if (legacy && !slotHasData(0)){ const parsed = JSON.parse(legacy); if (parsed?.people) writeSlot(0, parsed); }
+} catch {}
+
+loadSlots();
+{ const found = readSlot(slots.active); if (found?.people) doc = normalise(found); }
+
+loadPrefs();
+applyTheme();
+buildLegend();
+buildKey();
+buildKeyList();
+render();
+requestAnimationFrame(fit);
+</script>
+</body>
+</html>
